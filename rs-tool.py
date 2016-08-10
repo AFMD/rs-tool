@@ -6,10 +6,13 @@ import ipaddress
 import visa # https://github.com/hgrecco/pyvisa
 import numpy
 
+import matplotlib.pyplot as plt
+plt.switch_backend("Qt5Agg")
+
 # debugging/testing stuff
 import time
 #visa.log_to_screen() # for debugging
-import timeit
+#import timeit
 
 def main():
   # create a visa resource manager
@@ -44,89 +47,104 @@ def setupSweep(sm):
   maxCurrent = 0.05 # amps
   sweepStart = -0.003 #volts
   sweepEnd = 0.003 # volts
-  nPoints = 1001
-  #stepDelay = -1 # seconds (-1 for auto delay)
-  stepDelay = 0 # seconds (-1 for auto delay)
+  nPoints = 101
+  stepDelay = -1 # seconds (-1 for auto, nearly zero, delay)
   sm.write("*RST")
+  sm.write(":TRACE:CLEAR") # clear the defualt buffer ("defbuffer1")
+  sm.write("*CLS") # clear status & system logs and associated registers
+  sm.write("*SRE {:}".format((1<<2) + (1<<4))) # enable error reporting via status bit (by setting EAV bit)
   sm.write("*LANG SCPI")
+  
+  # setup for binary (superfast) data transfer
   sm.write(":FORMAT:DATA REAL")
+  sm.values_format.container = numpy.array
+  sm.values_format.datatype = 'd'
+  
   sm.write(':SOURCE1:FUNCTION VOLTAGE')
   sm.write(':SOURCE1:VOLTAGE:RANGE {:}'.format(max(map(abs,[sweepStart,sweepEnd]))))
   sm.write(':SOURCE1:VOLTAGE:ILIMIT {:}'.format(maxCurrent))
   sm.write(':SENSE1:FUNCTION "CURRENT"')
   sm.write(':SENSE1:CURRENT:RANGE {:}'.format(maxCurrent))
-  sm.write(":SENSE1:CURRENT:RSENSE 1") # enable four wire mode
-  sm.write(':SOURCE1:SWEEP:VOLTAGE:LINEAR {:}, {:}, {:}, {:}'.format(sweepStart,sweepEnd,nPoints,stepDelay))
+  sm.write(':SENSE1:CURRENT:RSENSE ON') # rsense (remote sense) ON means four wire mode
+  sm.write(':ROUTE:TERMINALS FRONT')
+  sm.write(':SOURCE1:VOLTAGE:LEVEL:IMMEDIATE:AMPLITUDE {:}'.format(sweepStart)) # set output to sweep start voltage
+  
+  # do one auto zero manually (could take over a second)
+  oldTimeout = sm.timeout
+  sm.timeout = 5000  
+  sm.write(':SENSE1:AZERO:ONCE') # do one autozero now
+  sm.write('*WAI') # no other commands during this
+  opc = sm.query('*OPC?') # wait for the operation to complete
+  sm.timeout=oldTimeout  
   
   # here are a few settings that trade accuracy for speed
-  sm.write(':SENSE1:CURRENT:AZERO:STATE 0') # disable autozero
-  sm.write(':SENSE1:CURRENT:NPLC 0.01') # set NPLC
-  sm.write(':SOURCE1:VOLTAGE:READ:BACK OFF') # disable voltage readback
+  #sm.write(':SENSE1:CURRENT:AZERO:STATE 0') # disable autozero for future readings
+  #sm.write(':SENSE1:CURRENT:NPLC 0.01') # set NPLC
+  #sm.write(':SOURCE1:VOLTAGE:READ:BACK OFF') # disable voltage readback
   
-  # do one auto zero manually is the manual autozero sequence (could take over a second)
-  sm.write(':SENSE1:AZERO:ONCE') # do one autozero now
-  oldTimeout = sm.timeout
-  sm.timeout = 5000
-  sm.query('*STB?') # ask for the status bit
-  sm.timeout=oldTimeout
+  # turn on the source and wait for it to settle
+  sm.write(':OUTPUT1:STATE ON')
+  sm.write('*WAI') # no other commands during this
+  opc = sm.query('*OPC?') # wait for the operation to complete
   
-  #sm.write():
+  stb = sm.query('*STB?') # ask for the status byte
+  if stb is not '0':
+    print ("Error: Non-zero status byte:", stb)
+    printEventLog(sm)
+    return
   
-  # make up a timeout for this sweep
+  # setup the sweep
+  sm.write(':SOURCE1:SWEEP:VOLTAGE:LINEAR {:}, {:}, {:}, {:}'.format(sweepStart,sweepEnd,nPoints,stepDelay))
+  # trigger the reading
+  sm.write(':INITIATE:IMMEDIATE') #should be: sm.assert_trigger()
+  sm.write('*WAI') # no other commands during this
+  
+  # ask for the contents of the sweep buffer with appropraite timeout
   # here we assume one measurement takes no longer than 100ms
   # and the initial setup time is 500ms
-  # this value might become an issue (not big enough) if averaging or high NPLC is configured
+  # this value might become an issue (not big enough) if averaging or high NPLC is configured  
   if stepDelay is -1: 
     stepDelay = 0
+  oldTimeout = sm.timeout
   sm.timeout = 500 + round(nPoints*(stepDelay*1000+100))  
-  
-  # trigger the reading
-  sm.write('INIT') #should be: sm.assert_trigger()
-  sm.write('*WAI') # no other commands during this sweep
-  #sm.values_format.use_binary('d', False, numpy.array)
-  message = 'TRACE:DATA? {:}, {:}, "defbuffer1", SOUR, READ'.format(1,nPoints) # form the "ask for buffer" message
-  
-  # ask for the contents of the sweep buffer
   t = time.time()
-  values = sm.query_binary_values(message, datatype='d', is_big_endian=False, container=numpy.array, delay=None, header_fmt='ieee')
+  opc = sm.query('*OPC?') # wait for the operation to complete
   elapsed=time.time()-t
-  print ("Elapsed =",elapsed*1000)
   sm.timeout = oldTimeout
+  nReadings = int(sm.query(':TRACE:ACTUAL?'))
+  print ("Sample frequency =",nReadings/elapsed,"Hz")
+  
+  if nReadings != nPoints: # check if we got enough readings
+    print("Error: We expected", nPoints, "data points, but the Keithley's data buffer contained", nReadings)
+    printEventLog(sm)
+    return
+  
+  # ask keithley to return its buffer
+  values = sm.query_values ('TRACE:DATA? {:}, {:}, "defbuffer1", SOUR, READ'.format(1,nPoints))
 
+  # process what we got back  
   values = values.reshape([-1,2])
   v = values[:,0]
   i = values[:,1]
-  #print(v)
-  #print(i)
-
-  #sm.write(':SENSE1:AVERAGE OFF')
-  #sm.write(':SENSE1:CURR:NPLC 1')
-  #sm.write(':SENSE1:FUNC:CONC OFF')
-  #sm.write(':OUTP ON')
-  #sm.write(':SENSE1:AZERO:ONCE')
   
+  # plot it up
+  plt.title('Sweep results')
+  plt.xlabel('Voltage [V]')
+  plt.ylabel('Current [A]')
+  plt.plot(v,i,marker='.')
+  plt.grid(b=True)
+  plt.draw()
+  plt.show()
   
-  #sm.write(":FORMAT:DATA REAL")
-  #print(sm.query_binary_values('READ?'))
-  
-  #sm.write(":FORMAT:DATA REAL")
-  #values = sm.query_binary_values('CURV?', datatype='d', is_big_endian=True)
-  #sm.values_format.use_binary('d', True, numpy.array)
-  #sm.write('CURV?')
-  #data = sm.read_raw()
-  #print(data)
-  #data = sm.read_values()
-  #print(data)
-  #sm.write(':SENS:AVER OFF')
-  
-  #sm.write(':SENS:FUNC:CONC OFF')
-  #sm.write(':SYST:AZER ON')
-  #sm.write(':SOUR:DEL:AUTO ON')
-  #sm.write(':SOUR:FUNC VOLT')
-  #sm.write(':SENS:FUNC "CURR:DC"')
-  #sm.write(':SENS:CURR:NPLC 1')
-  
-  #print (sm.query("*IDN?"))
+def printEventLog(sm):
+  while True:
+    errorString = sm.query(':SYSTEM:EVENTLOG:NEXT?')
+    errorSplit = errorString.split(',')
+    errorNum = int(errorSplit[0])
+    if errorNum == 0:
+      break # no error
+    else:
+      print(errorSplit[1])
 
 # connects to a instrument/device given a resource manager and some open parameters
 def visaConnect (rm, openParams):
@@ -156,8 +174,7 @@ def visaConnect (rm, openParams):
   # this software has been tested with a Keithley 2450 sourcemeter with firmware version 1.5.0g
   # your milage may vary if you try to use anything else
   
-  print("Device identified as:")
-  print(idnString)
+  print("Device identified as",idnString)
   
   return d
 
