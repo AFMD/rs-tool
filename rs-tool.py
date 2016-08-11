@@ -5,7 +5,48 @@ import sys
 import ipaddress
 import visa # https://github.com/hgrecco/pyvisa
 import numpy
+from scipy.optimize import curve_fit
+from math import pi, log, sqrt
 
+# for the GUI
+import pyqtGen
+from PyQt5 import QtCore, QtGui, QtWidgets
+class MainWindow(QtWidgets.QMainWindow):
+  def __init__(self):
+    QtWidgets.QMainWindow.__init__(self)
+    self.ui = pyqtGen.Ui_MainWindow()
+    self.ui.setupUi(self)
+    
+    self.ui.pushButton.clicked.connect(self.doSweep)
+    
+    # for now put this here, should be initiated by user later:
+    self.createResourceManager()
+    
+    # ====for TCPIP comms====
+    instrumentIP = ipaddress.ip_address('10.42.0.60') # IP address of sourcemeter
+    fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
+    timeout = 1000 # ms
+    #fullAddress = 'TCPIP::'+smAddressIP+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
+    openParams = {'resource_name': fullAddress, 'timeout': timeout, '_read_termination': u'\n'}    
+    self.connectToKeithley(openParams)
+    
+  def createResourceManager(self):
+    self.rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
+  
+  def connectToKeithley(self, openParams):
+    self.sm = visaConnect(self.rm, openParams)
+    
+  def doSweep(self):
+    setupSweep(self.sm)
+
+#from pyqtGen import Ui_MainWindow
+#class MyWindow(QtGui.QDialog):
+#  def __init__(self, parent=None):
+#    QtGui.QWidget.__init__(self, parent)
+#    self.ui = Ui_Dialog()
+#                                    self.ui.setupUi(self)
+
+# for plotting
 import matplotlib.pyplot as plt
 plt.switch_backend("Qt5Agg")
 
@@ -14,16 +55,22 @@ import time
 #visa.log_to_screen() # for debugging
 #import timeit
 
+
 def main():
+  app = QtWidgets.QApplication(sys.argv)
+  sweepUI = MainWindow()
+  sweepUI.show()
+  print (app.exec_())  
+
   # create a visa resource manager
-  rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
+  #rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
   
   # ====for TCPIP comms====
-  instrumentIP = ipaddress.ip_address('10.42.0.60') # IP address of sourcemeter
-  fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
-  timeout = 1000 # ms
+  #instrumentIP = ipaddress.ip_address('10.42.0.60') # IP address of sourcemeter
+  #fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
+  #timeout = 1000 # ms
   #fullAddress = 'TCPIP::'+smAddressIP+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
-  openParams = {'resource_name':fullAddress, 'timeout': timeout, '_read_termination': u'\n'}
+  #openParams = {'resource_name': fullAddress, 'timeout': timeout, '_read_termination': u'\n'}
   
   # ====for serial rs232 comms=====
   #serialPort = "/dev/ttyUSB0"
@@ -35,13 +82,13 @@ def main():
   #openParams = {'resource_name':fullAddress, 'timeout': timeout}
   
   # form a connection to our sourcemeter
-  sm = visaConnect(rm, openParams)
+  #sm = visaConnect(rm, openParams)
 
   # setup for sweep
-  setupSweep(sm)
+  #setupSweep(sm)
   
-  print("Done!")  
-  sm.close() # close connection
+  print("Done!")
+  sweepUI.sm.close() # close connection
   
 def setupSweep(sm):
   maxCurrent = 0.05 # amps
@@ -134,7 +181,7 @@ def setupSweep(sm):
   plt.plot(v,i,marker='.')
   plt.grid(b=True)
   plt.draw()
-  plt.show()
+  #plt.show()
   
 def printEventLog(sm):
   while True:
