@@ -7,6 +7,7 @@ import visa # https://github.com/hgrecco/pyvisa
 import numpy
 from scipy.optimize import curve_fit
 from math import pi, log, sqrt
+from scipy.stats.distributions import t #needed for confidence interval calculation
 
 # for plotting
 import matplotlib.pyplot as plt
@@ -17,6 +18,30 @@ import time
 #visa.log_to_screen() # for debugging
 #import timeit
 
+# for print() overloading for the gui's log pane
+import builtins as __builtin__
+logPane = None
+import io
+def print(*args, **kwargs):
+  """My custom print() function."""
+  # Adding new arguments to the print function signature 
+  # is probably a bad idea.
+  # Instead consider testing if custom argument keywords
+  # are present in kwargs
+  global logPane
+  if logPane != None:
+    stringBuf = io.StringIO()
+    kwargs['file'] = stringBuf
+    __builtin__.print(*args, **kwargs)
+    #logPane.moveCursor(QtGui.QTextCursor.End) # not needed?
+    logPane.insertPlainText(stringBuf.getvalue())    
+    sb = logPane.verticalScrollBar()
+    sb.setValue(sb.maximum())
+    #logPane.update() # not needed?
+    stringBuf.close()
+    kwargs['file'] = sys.stdout
+  return __builtin__.print(*args, **kwargs) 
+
 # for the GUI
 import pyqtGen
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -25,6 +50,20 @@ class MainWindow(QtWidgets.QMainWindow):
     QtWidgets.QMainWindow.__init__(self)
     self.ui = pyqtGen.Ui_MainWindow()
     self.ui.setupUi(self)
+    
+    global logPane
+    logPane = self.ui.textBrowser
+    self.ui.textBrowser.setTextBackgroundColor(QtGui.QColor('black'))
+    self.ui.textBrowser.setTextColor(QtGui.QColor(0, 255, 0))
+    #self.ui.textBrowser.setFontWeight(QtGui.QFont.Bold)
+    self.ui.textBrowser.setAutoFillBackground(True)
+    p = self.ui.textBrowser.palette()
+
+    p.setBrush(9, QtGui.QColor('black'))
+
+    
+    #p.setColor(self.ui.textBrowser.backgroundRole, QtGui.QColor('black'))
+    self.ui.textBrowser.setPalette(p)
     
     # for now put these here, should be initiated by user later:
     self.rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
@@ -50,7 +89,6 @@ class MainWindow(QtWidgets.QMainWindow):
     
   def doSweep(self):
     self.ui.pushButton.setDisabled(True) #TODO: somehow this is broken
-    time.sleep(1)
     # initiate the sweep
     doSweep(self.sm)
     # get the data
@@ -81,10 +119,10 @@ openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_ter
 def main():
   
   # ==== uncomment this for GUI ====
-  #app = QtWidgets.QApplication(sys.argv)
-  #sweepUI = MainWindow()
-  #sweepUI.show()
-  #sys.exit(app.exec_())
+  app = QtWidgets.QApplication(sys.argv)
+  sweepUI = MainWindow()
+  sweepUI.show()
+  sys.exit(app.exec_())
   # ==== end gui ====
 
   # create a visa resource manager
@@ -198,7 +236,7 @@ def fetchSweepData(sm,sweepParams):
   sm.timeout = oldTimeout
   nReadings = int(sm.query(':TRACE:ACTUAL?'))
   print ("Sweep complete!")
-  print ("Sample frequency =",nReadings/elapsed,"Hz")
+  print ("Sample frequency = {:.1f} Hz".format(nReadings/elapsed))
   print ("Sweep event Log:")
   printEventLog(sm)
   
@@ -220,18 +258,36 @@ def aLine(x,m,b):
   return m*x + b  
 
 def plotSweep(i,v):
-  print("Drawing sweep plot")
+  print("Drawing sweep plot now")
   
   # fit the data to a line
-  popt, pcov = curve_fit(aLine, v, i)
+  popt, fitCovariance = curve_fit(aLine, v, i)
   slope = popt[0]
   yIntercept = popt[1]
   iFit = aLine(v,slope,yIntercept)
   
-  # calculate the errors
-  pstd = numpy.sqrt(numpy.diag(pcov)) #standard deviation of estimates
+  slopeSigma = numpy.sqrt(numpy.diag(fitCovariance))[0]
+  
+  #error estimation:
+  alpha = 0.05 # 95% confidence interval = 100*(1-alpha)
+
+  nn = len(i)    # number of data points
+  p = len(popt) # number of parameters
+
+  dof = max(0, nn - p) # number of degrees of freedom
+
+  # student-t value for the dof and confidence level
+  tval = t.ppf(1.0-alpha/2., dof) 
+
+  #lowers = []
+  #uppers = []
+  #calculate 95% confidence interval
+  #for a, p, sigma in zip(list(range(nn)), fitParams, sigmas):
+  #  lower = p - sigma*tval
+  #  upper = p + sigma*tval  
+  #pstd = numpy.sqrt(numpy.diag(pcov)) #standard deviation of estimates
   rInv = slope
-  rInvErr = pstd[0] #standard deviation on slope
+  rInvErr = slopeSigma*tval #95% confidence error 
   R = 1/rInv
   rErr = rInvErr
   rS = R*pi/log(2)

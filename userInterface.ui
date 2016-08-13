@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Sheet Resistance Measurer</string>
   </property>
   <property name="dockOptions">
    <set>QMainWindow::AnimatedDocks</set>
@@ -37,7 +37,7 @@
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
-        <string>Plot</string>
+        <string>Result Plot</string>
        </attribute>
        <layout class="QGridLayout" name="gridLayout_3">
         <item row="0" column="0">
@@ -47,7 +47,7 @@
       </widget>
       <widget class="QWidget" name="tab_2">
        <attribute name="title">
-        <string>Controls</string>
+        <string>Sweep Control</string>
        </attribute>
        <layout class="QGridLayout" name="gridLayout_16">
         <item row="0" column="0">
@@ -170,7 +170,7 @@
             <item row="2" column="0">
              <widget class="QLabel" name="autoDelayLabel">
               <property name="text">
-               <string>Auto Delay</string>
+               <string>Auto Step Delay</string>
               </property>
              </widget>
             </item>
@@ -185,7 +185,7 @@
           </item>
          </layout>
         </item>
-        <item row="1" column="0">
+        <item row="1" column="0" alignment="Qt::AlignRight|Qt::AlignBottom">
          <widget class="QWidget" name="widget" native="true">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
@@ -195,41 +195,64 @@
           </property>
           <layout class="QHBoxLayout" name="horizontalLayout">
            <item>
-            <widget class="QWidget" name="widget_2" native="true"/>
-           </item>
-           <item>
-            <widget class="QWidget" name="widget_3" native="true"/>
-           </item>
-           <item alignment="Qt::AlignBottom">
-            <widget class="QPushButton" name="pushButton_2">
+            <widget class="QWidget" name="widget_5" native="true">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                <horstretch>0</horstretch>
                <verstretch>0</verstretch>
               </sizepolicy>
              </property>
-             <property name="text">
-              <string>Stop Sweep</string>
-             </property>
-            </widget>
-           </item>
-           <item alignment="Qt::AlignBottom">
-            <widget class="QPushButton" name="pushButton">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="text">
-              <string>Start Sweep</string>
-             </property>
+             <layout class="QGridLayout" name="gridLayout_4">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>15</number>
+              </property>
+              <property name="bottomMargin">
+               <number>15</number>
+              </property>
+              <item row="1" column="1">
+               <widget class="QPushButton" name="pushButton_2">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string>Stop Sweep</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QPushButton" name="pushButton">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string>Start Sweep</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </widget>
            </item>
           </layout>
          </widget>
         </item>
        </layout>
+      </widget>
+      <widget class="QWidget" name="tab_3">
+       <attribute name="title">
+        <string>Instrument Connection</string>
+       </attribute>
       </widget>
      </widget>
     </item>
@@ -254,7 +277,7 @@
    </property>
    <property name="minimumSize">
     <size>
-     <width>93</width>
+     <width>95</width>
      <height>85</height>
     </size>
    </property>
@@ -265,7 +288,7 @@
     <set>Qt::BottomDockWidgetArea</set>
    </property>
    <property name="windowTitle">
-    <string>Log</string>
+    <string>Event Log</string>
    </property>
    <attribute name="dockWidgetArea">
     <number>8</number>
@@ -299,10 +322,19 @@
         </size>
        </property>
        <property name="autoFillBackground">
-        <bool>false</bool>
+        <bool>true</bool>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::StyledPanel</enum>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Sunken</enum>
        </property>
        <property name="lineWrapMode">
         <enum>QTextEdit::NoWrap</enum>
+       </property>
+       <property name="textInteractionFlags">
+        <set>Qt::LinksAccessibleByKeyboard|Qt::LinksAccessibleByMouse|Qt::TextBrowserInteraction|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
        </property>
       </widget>
      </item>
