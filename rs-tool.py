@@ -45,12 +45,20 @@ def print(*args, **kwargs):
 # for the GUI
 import pyqtGen
 from PyQt5 import QtCore, QtGui, QtWidgets
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 class MainWindow(QtWidgets.QMainWindow):
   def __init__(self):
     QtWidgets.QMainWindow.__init__(self)
     self.ui = pyqtGen.Ui_MainWindow()
     self.ui.setupUi(self)
     
+    # tell the UI where to draw put matplotlib plots
+    self.plotFig = plt.figure(facecolor="white")
+    vBox = QtWidgets.QVBoxLayout()
+    vBox.addWidget(FigureCanvas(self.plotFig))
+    self.ui.plotTab.setLayout(vBox)     
+    
+    # set up things for our log pane
     global logPane
     logPane = self.ui.textBrowser
     self.ui.textBrowser.setTextBackgroundColor(QtGui.QColor('black'))
@@ -58,10 +66,7 @@ class MainWindow(QtWidgets.QMainWindow):
     #self.ui.textBrowser.setFontWeight(QtGui.QFont.Bold)
     self.ui.textBrowser.setAutoFillBackground(True)
     p = self.ui.textBrowser.palette()
-
     p.setBrush(9, QtGui.QColor('black'))
-
-    
     #p.setColor(self.ui.textBrowser.backgroundRole, QtGui.QColor('black'))
     self.ui.textBrowser.setPalette(p)
     
@@ -88,14 +93,17 @@ class MainWindow(QtWidgets.QMainWindow):
     self.sweepParams = setupSweep(self.sm)
     
   def doSweep(self):
-    self.ui.pushButton.setDisabled(True) #TODO: somehow this is broken
+    self.ui.tehTabs.setCurrentIndex(0) # switch to plot tab
+    #self.ui.pushButton.setDisabled(True) #TODO: somehow this is broken
     # initiate the sweep
     doSweep(self.sm)
     # get the data
     [i,v] = fetchSweepData(self.sm,self.sweepParams)
     # plot the sweep results
-    plotSweep(i,v)
-    self.ui.pushButton.setEnabled(True) #TODO: somehow this is broken
+    plotSweep(i,v,self.plotFig)
+    
+    
+    #self.ui.pushButton.setEnabled(True) #TODO: somehow this is broken
 
 
 # some global variables defining how we'll talk to the instrument
@@ -119,10 +127,10 @@ openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_ter
 def main():
   
   # ==== uncomment this for GUI ====
-  #app = QtWidgets.QApplication(sys.argv)
-  #sweepUI = MainWindow()
-  #sweepUI.show()
-  #sys.exit(app.exec_())
+  app = QtWidgets.QApplication(sys.argv)
+  sweepUI = MainWindow()
+  sweepUI.show()
+  sys.exit(app.exec_())
   # ==== end gui ====
 
   # create a visa resource manager
@@ -285,7 +293,11 @@ def plotSweep(i,v,fig):
   onePercent = 0.01*vRange
 
   # draw the plot on the given figure
-  ax = fig.add_subplot(1,1,1)
+  if fig.axes == []:
+    ax = fig.add_subplot(1,1,1)
+  else:
+    ax = fig.axes[0]
+    ax.clear()
   ax.set_title('Sweep Results')
   ax.set_xlabel('Voltage [V]')
   ax.set_ylabel('Current [A]')

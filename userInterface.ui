@@ -31,21 +31,16 @@
    </property>
    <layout class="QGridLayout" name="gridLayout_2">
     <item row="0" column="0">
-     <widget class="QTabWidget" name="tabWidget">
+     <widget class="QTabWidget" name="tehTabs">
       <property name="currentIndex">
-       <number>1</number>
+       <number>2</number>
       </property>
-      <widget class="QWidget" name="tab">
+      <widget class="QWidget" name="plotTab">
        <attribute name="title">
         <string>Result Plot</string>
        </attribute>
-       <layout class="QGridLayout" name="gridLayout_3">
-        <item row="0" column="0">
-         <widget class="QWidget" name="plotWidget" native="true"/>
-        </item>
-       </layout>
       </widget>
-      <widget class="QWidget" name="tab_2">
+      <widget class="QWidget" name="sweepTab">
        <attribute name="title">
         <string>Sweep Control</string>
        </attribute>
@@ -249,7 +244,7 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab_3">
+      <widget class="QWidget" name="connectTab">
        <attribute name="title">
         <string>Instrument Connection</string>
        </attribute>
@@ -264,7 +259,7 @@
      <x>0</x>
      <y>0</y>
      <width>670</width>
-     <height>28</height>
+     <height>25</height>
     </rect>
    </property>
   </widget>
