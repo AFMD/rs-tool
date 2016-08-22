@@ -7,7 +7,7 @@ import visa # https://github.com/hgrecco/pyvisa
 import numpy
 from scipy.optimize import curve_fit
 from math import pi, log, sqrt
-from scipy.stats.distributions import t #needed for confidence interval calculation
+import uncertainties as eprop # for confidence intervals
 
 # for plotting
 import matplotlib.pyplot as plt
@@ -269,43 +269,21 @@ def plotSweep(i,v,fig):
   
   slopeSigma = numpy.sqrt(numpy.diag(fitCovariance))[0]
   
-  #error estimation:
-  alpha = 0.05 # 95% confidence interval = 100*(1-alpha)
+  uSlope = eprop.ufloat(slope,slopeSigma)
 
-  nn = len(i)    # number of data points
-  p = len(popt) # number of parameters
+  R = 1/uSlope # resistance
+  rS = R*pi/log(2) # sheet resistance
 
-  dof = max(0, nn - p) # number of degrees of freedom
-
-  # student-t value for the dof and confidence level
-  tval = t.ppf(1.0-alpha/2., dof) 
-
-  #lowers = []
-  #uppers = []
-  #calculate 95% confidence interval
-  #for a, p, sigma in zip(list(range(nn)), fitParams, sigmas):
-  #  lower = p - sigma*tval
-  #  upper = p + sigma*tval  
-  #pstd = numpy.sqrt(numpy.diag(pcov)) #standard deviation of estimates
-  rInv = slope
-  rInvErr = slopeSigma*tval #95% confidence error 
-  R = 1/rInv
-  rErr = rInvErr
-  rS = R*pi/log(2)
-  rSErr = rErr*pi/log(2)
-
-  rString = u"R={0:.1f}\u00B1{1:.1f} [\u03A9]".format(R, rErr)
+  rString = "R=" +  R.format('0.6g') + u" [\u03A9]"
   print (rString)
-  rSString = u"R_s={0:.1f}\u00B1{1:.1f} [\u03A9/\u25AB]".format(rS, rSErr)
+  rSString = "R_s=" + rS.format('0.6g') + u" [\u03A9/\u25AB]"
   print (rSString)
-  rSStringShort = "{0:.1f}+/-{1:.1f}".format(rS, rSErr)
   
   vMax = max(v)
   vMin = min(v)
   vRange = vMax - vMin
   onePercent = 0.01*vRange
 
-  
   # draw the plot on the given figure
   ax = fig.add_subplot(1,1,1)
   ax.set_title('Sweep Results')
@@ -319,7 +297,6 @@ def plotSweep(i,v,fig):
   ax.set_xlim([vMin-onePercent,vMax+onePercent])
   ax.grid(b=True)
   fig.canvas.draw()
-  
   
 def printEventLog(sm):
   while True:
