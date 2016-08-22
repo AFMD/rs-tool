@@ -119,10 +119,10 @@ openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_ter
 def main():
   
   # ==== uncomment this for GUI ====
-  app = QtWidgets.QApplication(sys.argv)
-  sweepUI = MainWindow()
-  sweepUI.show()
-  sys.exit(app.exec_())
+  #app = QtWidgets.QApplication(sys.argv)
+  #sweepUI = MainWindow()
+  #sweepUI.show()
+  #sys.exit(app.exec_())
   # ==== end gui ====
 
   # create a visa resource manager
@@ -142,8 +142,9 @@ def main():
   # get the data
   [i,v] = fetchSweepData(sm,sweepParams)
   
-  # plot the sweep results
-  plotSweep(i,v)
+  fig=plt.figure() # make a figure to put the plot into
+  plotSweep(i,v,fig) # plot the sweep results
+  plt.show()
   
   print("Closing connection to", sm._logging_extra['resource_name'],"...")
   sm.close() # close connection
@@ -257,7 +258,7 @@ def fetchSweepData(sm,sweepParams):
 def aLine(x,m,b):
   return m*x + b  
 
-def plotSweep(i,v):
+def plotSweep(i,v,fig):
   print("Drawing sweep plot now")
   
   # fit the data to a line
@@ -298,20 +299,27 @@ def plotSweep(i,v):
   rSString = u"R_s={0:.1f}\u00B1{1:.1f} [\u03A9/\u25AB]".format(rS, rSErr)
   print (rSString)
   rSStringShort = "{0:.1f}+/-{1:.1f}".format(rS, rSErr)
+  
+  vMax = max(v)
+  vMin = min(v)
+  vRange = vMax - vMin
+  onePercent = 0.01*vRange
 
   
-  # draw the plot
-  plt.title('Sweep results')
-  plt.xlabel('Voltage [V]')
-  plt.ylabel('Current [A]')
-  data, = plt.plot(v,i,'ro', label="I-V data points")
-  fit, = plt.plot(v,iFit, label="Best linear fit")  
+  # draw the plot on the given figure
+  ax = fig.add_subplot(1,1,1)
+  ax.set_title('Sweep Results')
+  ax.set_xlabel('Voltage [V]')
+  ax.set_ylabel('Current [A]')
+  data, = ax.plot(v,i,'ro', label="I-V data points")
+  fit, = ax.plot(v,iFit, label="Best linear fit")
   fit.axes.text(0.1,0.9,'$'+rString+'$', transform = fit.axes.transAxes)
   fit.axes.text(0.1,0.8,'$'+rSString+'$', transform = fit.axes.transAxes)
-  plt.legend(handles=[data, fit],loc=4)
-  plt.grid(b=True)
-  plt.draw()
-  plt.show()
+  ax.legend(handles=[data, fit],loc=4)
+  ax.set_xlim([vMin-onePercent,vMax+onePercent])
+  ax.grid(b=True)
+  fig.canvas.draw()
+  
   
 def printEventLog(sm):
   while True:
