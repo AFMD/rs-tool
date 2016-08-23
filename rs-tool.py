@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # author: grey@christoforo.net
-
-import sys
 import ipaddress
 import visa # https://github.com/hgrecco/pyvisa
 import numpy
+
+import k2450 # functions to talk to a keithley 2450 sourcemeter
+
 from scipy.optimize import curve_fit
 from math import pi, log, sqrt
 import uncertainties as eprop # for confidence intervals
@@ -14,7 +15,6 @@ import matplotlib.pyplot as plt
 plt.switch_backend("Qt5Agg")
 
 # debugging/testing stuff
-import time
 #visa.log_to_screen() # for debugging
 #import timeit
 
@@ -49,9 +49,9 @@ class sweepThread(QtCore.QThread):
     self.mainWindow = mainWindow
 
   def run(self):
-    doSweep(self.mainWindow.sm)
+    k2450.doSweep(self.mainWindow.sm)
     # get the data
-    [i,v] = fetchSweepData(self.mainWindow.sm,self.mainWindow.sweepParams)
+    [i,v] = k2450.fetchSweepData(self.mainWindow.sm,self.mainWindow.sweepParams)
     if i is not None:
       self.mainWindow.ax1.clear()
       self.mainWindow.ax1.set_title('Forward Sweep Results',loc="right")
@@ -61,10 +61,10 @@ class sweepThread(QtCore.QThread):
     reverseParams = self.mainWindow.sweepParams.copy()
     reverseParams['sweepStart'] = self.mainWindow.sweepParams['sweepEnd']
     reverseParams['sweepEnd'] = self.mainWindow.sweepParams['sweepStart']
-    configureSweep2450(self.mainWindow.sm,reverseParams)
-    doSweep(self.mainWindow.sm)
+    k2450.configureSweep(self.mainWindow.sm,reverseParams)
+    k2450.doSweep(self.mainWindow.sm)
     # get the data
-    [i,v] = fetchSweepData(self.mainWindow.sm,reverseParams)
+    [i,v] = k2450.fetchSweepData(self.mainWindow.sm,reverseParams)
     if i is not None:
       self.mainWindow.ax2.clear()
       self.mainWindow.ax2.set_title('Reverse Sweep Results',loc="right")
@@ -105,7 +105,7 @@ class MainWindow(QtWidgets.QMainWindow):
     if self.sm is None:
       exit()
 
-    setup2450(self.sm)
+    k2450.setup2450(self.sm)
     
     self.sweepParams = {} # here we'll store the parameters that define our sweep
     self.sweepParams['maxCurrent'] = 0.05 # amps
@@ -113,8 +113,8 @@ class MainWindow(QtWidgets.QMainWindow):
     self.sweepParams['sweepEnd'] = 0.003 # volts
     self.sweepParams['nPoints'] = 101
     self.sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
-    self.sweepParams['durationEstimate'] = estimateSweepTimeout2450(self.sweepParams['nPoints'], self.sweepParams['stepDelay'])
-    configureSweep2450(self.sm,self.sweepParams)
+    self.sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(self.sweepParams['nPoints'], self.sweepParams['stepDelay'])
+    k2450.configureSweep(self.sm,self.sweepParams)
     
     # connect up the sweep button
     self.ui.pushButton.clicked.connect(self.doSweep)
@@ -130,7 +130,7 @@ class MainWindow(QtWidgets.QMainWindow):
       return
     
   def connectToKeithley(self, openParams):
-    self.sm = visaConnect(self.rm, openParams)
+    self.sm = k2450.visaConnect(self.rm, openParams)
     
   def scrollLog(self): # scrolls log to maximum position
     self.ui.textBrowser.verticalScrollBar().setValue(self.ui.textBrowser.verticalScrollBar().maximum())    
@@ -160,22 +160,22 @@ openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_ter
 def main():
   
   # ==== uncomment this for GUI ====
-  app = QtWidgets.QApplication(sys.argv)
-  sweepUI = MainWindow()
-  sweepUI.show()
-  sys.exit(app.exec_())
+  #app = QtWidgets.QApplication(sys.argv)
+  #sweepUI = MainWindow()
+  #sweepUI.show()
+  #sys.exit(app.exec_())
   # ==== end gui ====
 
   # create a visa resource manager
   rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
   
   # form a connection to our sourcemeter
-  sm = visaConnect(rm, openParams)
+  sm = k2450.visaConnect(rm, openParams)
   if sm is None:
     exit()
 
   # generic 2450 setup
-  setup2450(sm)
+  k2450.setup2450(sm)
   
   sweepParams = {} # here we'll store the parameters that define our sweep
   sweepParams['maxCurrent'] = 0.05 # amps
@@ -183,13 +183,13 @@ def main():
   sweepParams['sweepEnd'] = 0.003 # volts
   sweepParams['nPoints'] = 101
   sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
-  sweepParams['durationEstimate'] = estimateSweepTimeout2450(sweepParams['nPoints'], sweepParams['stepDelay'])
-  configureSweep2450(sm,sweepParams)
+  sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(sweepParams['nPoints'], sweepParams['stepDelay'])
+  k2450.configureSweep(sm,sweepParams)
   
   # initiate the forward sweep
-  doSweep(sm)
+  k2450.doSweep(sm)
   # get the data
-  [i,v] = fetchSweepData(sm,sweepParams)
+  [i,v] = k2450.fetchSweepData(sm,sweepParams)
   
   fig = plt.figure() # make a figure to put the plot into
   if i is not None:
@@ -202,11 +202,11 @@ def main():
   # setup for reverse sweep
   sweepParams['sweepStart'] = 0.003 # volts
   sweepParams['sweepEnd'] = -0.003 # volts
-  configureSweep2450(sm,sweepParams)
+  k2450.configureSweep(sm,sweepParams)
   # initiate the reverse sweep
-  doSweep(sm)
+  k2450.doSweep(sm)
   # get the data
-  [i,v] = fetchSweepData(sm,sweepParams)
+  [i,v] = k2450.fetchSweepData(sm,sweepParams)
   
   if i is not None:
     ax = fig.add_subplot(2,1,2)
@@ -218,111 +218,6 @@ def main():
   print("Closing connection to", sm._logging_extra['resource_name'],"...")
   sm.close() # close connection
   print("Connection closed.")
-  
-# basic setup tasks for a keithley 2450
-def setup2450(sm):
-  sm.write("*RST")
-  sm.write(":TRACE:CLEAR") # clear the defualt buffer ("defbuffer1")
-  sm.write("*CLS") # clear status & system logs and associated registers
-  sm.write("*SRE {:}".format((1<<2) + (1<<4))) # enable error reporting via status bit (by setting EAV bit)
-  sm.write("*LANG SCPI")
-  
-  # setup for binary (superfast) data transfer
-  sm.write(":FORMAT:DATA REAL")
-  sm.values_format.container = numpy.array
-  sm.values_format.datatype = 'd'  
-
-# returns number of milliseconds to use for the sweep timeout value
-def estimateSweepTimeout2450(nPoints,stepDelay):
-  # let's estimate how long the sweep will take so we know when to time out
-  # here we assume one measurement takes no longer than 100ms
-  # and the initial setup time is 500ms
-  # this will break if NPLC and averaging are not their default values
-  # TODO: take into account NPLC and averaging to make a better estimate
-  if stepDelay is -1:
-    localStepDelay = 0
-  else:
-    localStepDelay = stepDelay
-  return 500 + round(nPoints*(localStepDelay*1000+100))
-  
-# setup 2450 for sweep
-def configureSweep2450(sm,sweepParams):
-  sm.write(':SOURCE1:FUNCTION VOLTAGE')
-  sm.write(':SOURCE1:VOLTAGE:RANGE {:}'.format(max(map(abs,[sweepParams['sweepStart'],sweepParams['sweepEnd']]))))
-  sm.write(':SOURCE1:VOLTAGE:ILIMIT {:}'.format(sweepParams['maxCurrent']))
-  sm.write(':SENSE1:FUNCTION "CURRENT"')
-  sm.write(':SENSE1:CURRENT:RANGE {:}'.format(sweepParams['maxCurrent']))
-  sm.write(':SENSE1:CURRENT:RSENSE ON') # rsense (remote sense) ON means four wire mode
-  sm.write(':ROUTE:TERMINALS FRONT')
-  sm.write(':SOURCE1:VOLTAGE:LEVEL:IMMEDIATE:AMPLITUDE {:}'.format(sweepParams['sweepStart'])) # set output to sweep start voltage
-  
-  # do one auto zero manually (could take over a second)
-  oldTimeout = sm.timeout
-  sm.timeout = 5000  
-  sm.write(':SENSE1:AZERO:ONCE') # do one autozero now
-  sm.write('*WAI') # no other commands during this
-  opc = sm.query('*OPC?') # wait for the operation to complete
-  sm.timeout=oldTimeout  
-  
-  # here are a few settings that trade accuracy for speed
-  #sm.write(':SENSE1:CURRENT:AZERO:STATE 0') # disable autozero for future readings
-  #sm.write(':SENSE1:CURRENT:NPLC 0.01') # set NPLC
-  #sm.write(':SOURCE1:VOLTAGE:READ:BACK OFF') # disable voltage readback
-  
-  # turn on the source and wait for it to settle
-  sm.write(':OUTPUT1:STATE ON')
-  sm.write('*WAI') # no other commands during this
-  opc = sm.query('*OPC?') # wait for the operation to complete
-  
-  stb = sm.query('*STB?') # ask for the status byte
-  if stb is not '0':
-    print ("Error: Non-zero status byte:", stb)
-    printEventLog(sm)
-    return None
-  
-  # setup the sweep
-  sm.write(':SOURCE1:SWEEP:VOLTAGE:LINEAR {:}, {:}, {:}, {:}'.format(sweepParams['sweepStart'],sweepParams['sweepEnd'],sweepParams['nPoints'],sweepParams['stepDelay']))
-
-def doSweep(sm):
-  # check that things are cool before we do the sweep
-  stb = sm.query('*STB?') # ask for the status byte
-  if stb is not '0':
-    print ("Error: Non-zero status byte:", stb)
-    printEventLog(sm)
-    return  
-  
-  print ("Sweep initiated...")
-  # trigger the sweep
-  sm.write(':INITIATE:IMMEDIATE') #should be: sm.assert_trigger()
-  sm.write('*WAI') # no other commands during this
-
-def fetchSweepData(sm,sweepParams):
-  oldTimeout = sm.timeout
-  sm.timeout = sweepParams['durationEstimate']
-  t = time.time()
-  #TODO: should rely on SRQ here rather than read with timeout
-  opc = sm.query('*OPC?') # wait for any pending operation to complete
-  elapsed=time.time()-t
-  sm.timeout = oldTimeout
-  nReadings = int(sm.query(':TRACE:ACTUAL?'))
-  print ("Sweep complete!")
-  print ("Sample frequency = {:.1f} Hz".format(nReadings/elapsed))
-  print ("Sweep event Log:")
-  printEventLog(sm)
-  
-  if nReadings != sweepParams['nPoints']: # check if we got enough readings
-    print("Error: We expected", sweepParams['nPoints'], "data points, but the Keithley's data buffer contained", nReadings)
-    return (None,None)
-  
-  # ask keithley to return its buffer
-  values = sm.query_values ('TRACE:DATA? {:}, {:}, "defbuffer1", SOUR, READ'.format(1,sweepParams['nPoints']))
-
-  # reformat what we got back  
-  values = values.reshape([-1,2])
-  v = values[:,0]
-  i = values[:,1]
-  
-  return (i,v)
 
 def aLine(x,m,b):
   return m*x + b
@@ -365,53 +260,6 @@ def plotSweep(i,v,ax):
   ax.grid(b=True)
   ax.get_figure().canvas.draw()
   
-def printEventLog(sm):
-  while True:
-    errorString = sm.query(':SYSTEM:EVENTLOG:NEXT?')
-    errorSplit = errorString.split('"')
-    errorNum = int(errorSplit[0].split(',')[0])
-    if errorNum == 0:
-      break # no error
-    else:
-      errorSubSplit = errorSplit[1] # toss quotations
-      errorSubSplit = errorSubSplit.split(';')
-      print(errorSubSplit[2], errorSubSplit[0],"TYPE",errorSubSplit[1],)
-  sm.write(':SYSTEM:CLEAR') # clear the logs since we've read them now
-
-# connects to a instrument/device given a resource manager and some open parameters
-def visaConnect (rm, openParams):
-  print("Connecting to", fullAddress, "...")
-  try:
-    d = rm.open_resource(**openParams) # connect to device
-  except:
-    print("Unable to connect via", openParams['resource_name'])
-    exctype, value = sys.exc_info()[:2]
-    print(value)
-    return None
-  print("Connection established.")
-  
-  print("Querying device type...")
-  try:
-    # ask the device to identify its self
-    idnString = d.query("*IDN?")
-  except:
-    print('Unable perform "*IDN?" query.')
-    exctype, value = sys.exc_info()[:2]
-    print(value)
-    try:
-      d.close()
-    except:
-      pass
-    return None
-  
-  #idnFields = idnString.split(',')
-  #idnFieldsExpected = ['KEITHLEY INSTRUMENTS', 'MODEL 2450', '04085562', '1.5.0g']
-  # this software has been tested with a Keithley 2450 sourcemeter with firmware version 1.5.0g
-  # your milage may vary if you try to use anything else
-  
-  print("Device identified as",idnString)
-  
-  return d
 
 if __name__ == "__main__":
   main()
