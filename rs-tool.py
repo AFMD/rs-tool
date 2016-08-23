@@ -53,8 +53,23 @@ class sweepThread(QtCore.QThread):
     # get the data
     [i,v] = fetchSweepData(self.mainWindow.sm,self.mainWindow.sweepParams)
     if i is not None:
-      ax = self.mainWindow.plotFig.add_subplot(1,1,1)
-      plotSweep(i,v,ax) # plot the sweep results
+      self.mainWindow.ax1.clear()
+      self.mainWindow.ax1.set_title('Forward Sweep Results',loc="right")
+      plotSweep(i,v,self.mainWindow.ax1) # plot the sweep results
+
+    # now do a reverse sweep
+    reverseParams = self.mainWindow.sweepParams.copy()
+    reverseParams['sweepStart'] = self.mainWindow.sweepParams['sweepEnd']
+    reverseParams['sweepEnd'] = self.mainWindow.sweepParams['sweepStart']
+    configureSweep2450(self.mainWindow.sm,reverseParams)
+    doSweep(self.mainWindow.sm)
+    # get the data
+    [i,v] = fetchSweepData(self.mainWindow.sm,reverseParams)
+    if i is not None:
+      self.mainWindow.ax2.clear()
+      self.mainWindow.ax2.set_title('Reverse Sweep Results',loc="right")
+      plotSweep(i,v,self.mainWindow.ax2) # plot the sweep results  
+    
 
 class MainWindow(QtWidgets.QMainWindow):
   def __init__(self):
@@ -63,9 +78,11 @@ class MainWindow(QtWidgets.QMainWindow):
     self.ui.setupUi(self)
     
     # tell the UI where to draw put matplotlib plots
-    self.plotFig = plt.figure(facecolor="white")
+    fig = plt.figure(facecolor="white")
+    self.ax1 = fig.add_subplot(2,1,1)
+    self.ax2 = fig.add_subplot(2,1,2)
     vBox = QtWidgets.QVBoxLayout()
-    vBox.addWidget(FigureCanvas(self.plotFig))
+    vBox.addWidget(FigureCanvas(fig))
     self.ui.plotTab.setLayout(vBox)
     
     # set up things for our log pane
@@ -169,16 +186,34 @@ def main():
   sweepParams['durationEstimate'] = estimateSweepTimeout2450(sweepParams['nPoints'], sweepParams['stepDelay'])
   configureSweep2450(sm,sweepParams)
   
-  # initiate the sweep
+  # initiate the forward sweep
+  doSweep(sm)
+  # get the data
+  [i,v] = fetchSweepData(sm,sweepParams)
+  
+  fig = plt.figure() # make a figure to put the plot into
+  if i is not None:
+    ax = fig.add_subplot(2,1,1)
+    ax.clear()
+    ax.set_title('Forward Sweep Results')
+    plotSweep(i,v,ax) # plot the sweep results
+    plt.show(block=False)
+  
+  # setup for reverse sweep
+  sweepParams['sweepStart'] = 0.003 # volts
+  sweepParams['sweepEnd'] = -0.003 # volts
+  configureSweep2450(sm,sweepParams)
+  # initiate the reverse sweep
   doSweep(sm)
   # get the data
   [i,v] = fetchSweepData(sm,sweepParams)
   
   if i is not None:
-    fig = plt.figure() # make a figure to put the plot into
-    ax = fig.add_subplot(1,1,1)
+    ax = fig.add_subplot(2,1,2)
+    ax.clear()
+    ax.set_title('Reverse Sweep Results')
     plotSweep(i,v,ax) # plot the sweep results
-    plt.show()
+    plt.show()  
   
   print("Closing connection to", sm._logging_extra['resource_name'],"...")
   sm.close() # close connection
@@ -319,8 +354,6 @@ def plotSweep(i,v,ax):
   onePercent = 0.01*vRange
 
   # draw the plot on the given axis
-  ax.clear()   
-  ax.set_title('Sweep Results')
   ax.set_xlabel('Voltage [V]')
   ax.set_ylabel('Current [A]')
   data, = ax.plot(v,i,'ro', label="I-V data points")
