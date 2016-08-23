@@ -73,7 +73,17 @@ class MainWindow(QtWidgets.QMainWindow):
     # for now put these here, should be initiated by user later:
     self.rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
     self.connectToKeithley(openParams)
-    self.guiSetupSweep()
+    
+    setup2450(self.sm)
+    
+    self.sweepParams = {} # here we'll store the parameters that define our sweep
+    self.sweepParams['maxCurrent'] = 0.05 # amps
+    self.sweepParams['sweepStart'] = -0.003 # volts
+    self.sweepParams['sweepEnd'] = 0.003 # volts
+    self.sweepParams['nPoints'] = 101
+    self.sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
+    self.sweepParams['durationEstimate'] = estimateSweepTimeout2450(self.sweepParams['nPoints'], self.sweepParams['stepDelay'])
+    configureSweep2450(self.sm,self.sweepParams)
     
     # connect up the sweep button
     self.ui.pushButton.clicked.connect(self.doSweep)
@@ -89,9 +99,6 @@ class MainWindow(QtWidgets.QMainWindow):
   def connectToKeithley(self, openParams):
     self.sm = visaConnect(self.rm, openParams)
     
-  def guiSetupSweep(self):
-    self.sweepParams = setupSweep(self.sm)
-    
   def doSweep(self):
     self.ui.tehTabs.setCurrentIndex(0) # switch to plot tab
     #self.ui.pushButton.setDisabled(True) #TODO: somehow this is broken
@@ -99,10 +106,8 @@ class MainWindow(QtWidgets.QMainWindow):
     doSweep(self.sm)
     # get the data
     [i,v] = fetchSweepData(self.sm,self.sweepParams)
-    # plot the sweep results
-    plotSweep(i,v,self.plotFig)
-    
-    
+    if i is not None:
+      plotSweep(i,v,self.plotFig) # plot the sweep results  
     #self.ui.pushButton.setEnabled(True) #TODO: somehow this is broken
 
 
@@ -141,29 +146,34 @@ def main():
   if sm is None:
     exit()
 
-  # setup for sweep
-  sweepParams = setupSweep(sm)
+  # generic 2450 setup
+  setup2450(sm)
+  
+  sweepParams = {} # here we'll store the parameters that define our sweep
+  sweepParams['maxCurrent'] = 0.05 # amps
+  sweepParams['sweepStart'] = -0.003 # volts
+  sweepParams['sweepEnd'] = 0.003 # volts
+  sweepParams['nPoints'] = 101
+  sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
+  sweepParams['durationEstimate'] = estimateSweepTimeout2450(sweepParams['nPoints'], sweepParams['stepDelay'])
+  configureSweep2450(sm,sweepParams)
   
   # initiate the sweep
   doSweep(sm)
-  
   # get the data
   [i,v] = fetchSweepData(sm,sweepParams)
   
-  fig=plt.figure() # make a figure to put the plot into
-  plotSweep(i,v,fig) # plot the sweep results
-  plt.show()
+  if i is not None:
+    fig = plt.figure() # make a figure to put the plot into
+    plotSweep(i,v,fig) # plot the sweep results
+    plt.show()
   
   print("Closing connection to", sm._logging_extra['resource_name'],"...")
   sm.close() # close connection
   print("Connection closed.")
   
-def setupSweep(sm):
-  maxCurrent = 0.05 # amps
-  sweepStart = -0.003 #volts
-  sweepEnd = 0.003 # volts
-  nPoints = 101
-  stepDelay = -1 # seconds (-1 for auto, nearly zero, delay)
+# basic setup tasks for a keithley 2450
+def setup2450(sm):
   sm.write("*RST")
   sm.write(":TRACE:CLEAR") # clear the defualt buffer ("defbuffer1")
   sm.write("*CLS") # clear status & system logs and associated registers
@@ -173,16 +183,31 @@ def setupSweep(sm):
   # setup for binary (superfast) data transfer
   sm.write(":FORMAT:DATA REAL")
   sm.values_format.container = numpy.array
-  sm.values_format.datatype = 'd'
+  sm.values_format.datatype = 'd'  
+
+# returns number of milliseconds to use for the sweep timeout value
+def estimateSweepTimeout2450(nPoints,stepDelay):
+  # let's estimate how long the sweep will take so we know when to time out
+  # here we assume one measurement takes no longer than 100ms
+  # and the initial setup time is 500ms
+  # this will break if NPLC and averaging are not their default values
+  # TODO: take into account NPLC and averaging to make a better estimate
+  if stepDelay is -1:
+    localStepDelay = 0
+  else:
+    localStepDelay = stepDelay
+  return 500 + round(nPoints*(localStepDelay*1000+100))
   
+# setup 2450 for sweep
+def configureSweep2450(sm,sweepParams):
   sm.write(':SOURCE1:FUNCTION VOLTAGE')
-  sm.write(':SOURCE1:VOLTAGE:RANGE {:}'.format(max(map(abs,[sweepStart,sweepEnd]))))
-  sm.write(':SOURCE1:VOLTAGE:ILIMIT {:}'.format(maxCurrent))
+  sm.write(':SOURCE1:VOLTAGE:RANGE {:}'.format(max(map(abs,[sweepParams['sweepStart'],sweepParams['sweepEnd']]))))
+  sm.write(':SOURCE1:VOLTAGE:ILIMIT {:}'.format(sweepParams['maxCurrent']))
   sm.write(':SENSE1:FUNCTION "CURRENT"')
-  sm.write(':SENSE1:CURRENT:RANGE {:}'.format(maxCurrent))
+  sm.write(':SENSE1:CURRENT:RANGE {:}'.format(sweepParams['maxCurrent']))
   sm.write(':SENSE1:CURRENT:RSENSE ON') # rsense (remote sense) ON means four wire mode
   sm.write(':ROUTE:TERMINALS FRONT')
-  sm.write(':SOURCE1:VOLTAGE:LEVEL:IMMEDIATE:AMPLITUDE {:}'.format(sweepStart)) # set output to sweep start voltage
+  sm.write(':SOURCE1:VOLTAGE:LEVEL:IMMEDIATE:AMPLITUDE {:}'.format(sweepParams['sweepStart'])) # set output to sweep start voltage
   
   # do one auto zero manually (could take over a second)
   oldTimeout = sm.timeout
@@ -209,18 +234,7 @@ def setupSweep(sm):
     return None
   
   # setup the sweep
-  sm.write(':SOURCE1:SWEEP:VOLTAGE:LINEAR {:}, {:}, {:}, {:}'.format(sweepStart,sweepEnd,nPoints,stepDelay))
-
-  # here we assume one measurement takes no longer than 100ms
-  # and the initial setup time is 500ms
-  # this value might become an issue (not big enough) if averaging or high NPLC is configured    
-  if stepDelay is -1:
-    stepDelay = 0
-  durationEstimate = 500 + round(nPoints*(stepDelay*1000+100))
-  
-  sweepParams = {'durationEstimate':durationEstimate, 'nPoints':nPoints, }
-  
-  return sweepParams
+  sm.write(':SOURCE1:SWEEP:VOLTAGE:LINEAR {:}, {:}, {:}, {:}'.format(sweepParams['sweepStart'],sweepParams['sweepEnd'],sweepParams['nPoints'],sweepParams['stepDelay']))
 
 def doSweep(sm):
   # check that things are cool before we do the sweep
@@ -251,7 +265,7 @@ def fetchSweepData(sm,sweepParams):
   
   if nReadings != sweepParams['nPoints']: # check if we got enough readings
     print("Error: We expected", sweepParams['nPoints'], "data points, but the Keithley's data buffer contained", nReadings)
-    return
+    return (None,None)
   
   # ask keithley to return its buffer
   values = sm.query_values ('TRACE:DATA? {:}, {:}, "defbuffer1", SOUR, READ'.format(1,sweepParams['nPoints']))
@@ -313,12 +327,12 @@ def plotSweep(i,v,fig):
 def printEventLog(sm):
   while True:
     errorString = sm.query(':SYSTEM:EVENTLOG:NEXT?')
-    errorSplit = errorString.split(',')
-    errorNum = int(errorSplit[0])
+    errorSplit = errorString.split('"')
+    errorNum = int(errorSplit[0].split(',')[0])
     if errorNum == 0:
       break # no error
     else:
-      errorSubSplit = errorSplit[1][1:-1] # toss quotations
+      errorSubSplit = errorSplit[1] # toss quotations
       errorSubSplit = errorSubSplit.split(';')
       print(errorSubSplit[2], errorSubSplit[0],"TYPE",errorSubSplit[1],)
   sm.write(':SYSTEM:CLEAR') # clear the logs since we've read them now
