@@ -18,34 +18,44 @@ import time
 #visa.log_to_screen() # for debugging
 #import timeit
 
-# for print() overloading for the gui's log pane
-import builtins as __builtin__
-logPane = None
-import io
-def print(*args, **kwargs):
-  """My custom print() function."""
-  # Adding new arguments to the print function signature 
-  # is probably a bad idea.
-  # Instead consider testing if custom argument keywords
-  # are present in kwargs
-  global logPane
-  if logPane != None:
-    stringBuf = io.StringIO()
-    kwargs['file'] = stringBuf
-    __builtin__.print(*args, **kwargs)
-    #logPane.moveCursor(QtGui.QTextCursor.End) # not needed?
-    logPane.insertPlainText(stringBuf.getvalue())    
-    sb = logPane.verticalScrollBar()
-    sb.setValue(sb.maximum())
-    #logPane.update() # not needed?
-    stringBuf.close()
-    kwargs['file'] = sys.stdout
-  return __builtin__.print(*args, **kwargs) 
-
 # for the GUI
 import pyqtGen
 from PyQt5 import QtCore, QtGui, QtWidgets
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+
+# for print() overloading for the gui's log pane
+import builtins as __builtin__
+myPrinter = None
+import io
+class MyPrinter(QtCore.QObject): # a class that holds the signals we'll need for passing around the log data
+  writeToLog = QtCore.pyqtSignal(str) # this signal sends the contents for the log
+  scrollLog = QtCore.pyqtSignal() # this signal tells the log to scroll to its max position
+def print(*args, **kwargs): # overload the print() function
+  global myPrinter
+  if myPrinter is not None: # check to see if the gui has created myPrinter
+    stringBuf = io.StringIO()
+    kwargs['file'] = stringBuf
+    __builtin__.print(*args, **kwargs) # print to our string buffer
+    myPrinter.writeToLog.emit(stringBuf.getvalue())
+    myPrinter.scrollLog.emit()
+    stringBuf.close()
+    kwargs['file'] = sys.stdout
+  return __builtin__.print(*args, **kwargs) # now do the print for rel
+
+# this is the thread where the sweep takes place
+class sweepThread(QtCore.QThread):
+  def __init__(self, mainWindow, parent=None):
+    QtCore.QThread.__init__(self, parent)
+    self.mainWindow = mainWindow
+
+  def run(self):
+    doSweep(self.mainWindow.sm)
+    # get the data
+    [i,v] = fetchSweepData(self.mainWindow.sm,self.mainWindow.sweepParams)
+    if i is not None:
+      ax = self.mainWindow.plotFig.add_subplot(1,1,1)
+      plotSweep(i,v,ax) # plot the sweep results
+
 class MainWindow(QtWidgets.QMainWindow):
   def __init__(self):
     QtWidgets.QMainWindow.__init__(self)
@@ -56,11 +66,13 @@ class MainWindow(QtWidgets.QMainWindow):
     self.plotFig = plt.figure(facecolor="white")
     vBox = QtWidgets.QVBoxLayout()
     vBox.addWidget(FigureCanvas(self.plotFig))
-    self.ui.plotTab.setLayout(vBox)     
+    self.ui.plotTab.setLayout(vBox)
     
     # set up things for our log pane
-    global logPane
-    logPane = self.ui.textBrowser
+    global myPrinter
+    myPrinter = MyPrinter()
+    myPrinter.writeToLog.connect(self.ui.textBrowser.insertPlainText)
+    myPrinter.scrollLog.connect(self.scrollLog)
     self.ui.textBrowser.setTextBackgroundColor(QtGui.QColor('black'))
     self.ui.textBrowser.setTextColor(QtGui.QColor(0, 255, 0))
     #self.ui.textBrowser.setFontWeight(QtGui.QFont.Bold)
@@ -73,7 +85,9 @@ class MainWindow(QtWidgets.QMainWindow):
     # for now put these here, should be initiated by user later:
     self.rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
     self.connectToKeithley(openParams)
-    
+    if self.sm is None:
+      exit()
+
     setup2450(self.sm)
     
     self.sweepParams = {} # here we'll store the parameters that define our sweep
@@ -88,6 +102,8 @@ class MainWindow(QtWidgets.QMainWindow):
     # connect up the sweep button
     self.ui.pushButton.clicked.connect(self.doSweep)
     
+    self.sweepThread = sweepThread(self)    
+    
   def __del__(self):
     try:
       print("Closing connection to", self.sm._logging_extra['resource_name'],"...")
@@ -99,17 +115,12 @@ class MainWindow(QtWidgets.QMainWindow):
   def connectToKeithley(self, openParams):
     self.sm = visaConnect(self.rm, openParams)
     
+  def scrollLog(self): # scrolls log to maximum position
+    self.ui.textBrowser.verticalScrollBar().setValue(self.ui.textBrowser.verticalScrollBar().maximum())    
+    
   def doSweep(self):
     self.ui.tehTabs.setCurrentIndex(0) # switch to plot tab
-    #self.ui.pushButton.setDisabled(True) #TODO: somehow this is broken
-    # initiate the sweep
-    doSweep(self.sm)
-    # get the data
-    [i,v] = fetchSweepData(self.sm,self.sweepParams)
-    if i is not None:
-      plotSweep(i,v,self.plotFig) # plot the sweep results  
-    #self.ui.pushButton.setEnabled(True) #TODO: somehow this is broken
-
+    self.sweepThread.start()
 
 # some global variables defining how we'll talk to the instrument
 # ====for TCPIP comms====
@@ -165,7 +176,8 @@ def main():
   
   if i is not None:
     fig = plt.figure() # make a figure to put the plot into
-    plotSweep(i,v,fig) # plot the sweep results
+    ax = fig.add_subplot(1,1,1)
+    plotSweep(i,v,ax) # plot the sweep results
     plt.show()
   
   print("Closing connection to", sm._logging_extra['resource_name'],"...")
@@ -245,7 +257,7 @@ def doSweep(sm):
     return  
   
   print ("Sweep initiated...")
-  # trigger the swqqqp
+  # trigger the sweep
   sm.write(':INITIATE:IMMEDIATE') #should be: sm.assert_trigger()
   sm.write('*WAI') # no other commands during this
 
@@ -278,9 +290,9 @@ def fetchSweepData(sm,sweepParams):
   return (i,v)
 
 def aLine(x,m,b):
-  return m*x + b  
+  return m*x + b
 
-def plotSweep(i,v,fig):
+def plotSweep(i,v,ax):
   print("Drawing sweep plot now")
   
   # fit the data to a line
@@ -306,12 +318,8 @@ def plotSweep(i,v,fig):
   vRange = vMax - vMin
   onePercent = 0.01*vRange
 
-  # draw the plot on the given figure
-  if fig.axes == []:
-    ax = fig.add_subplot(1,1,1)
-  else:
-    ax = fig.axes[0]
-    ax.clear()
+  # draw the plot on the given axis
+  ax.clear()   
   ax.set_title('Sweep Results')
   ax.set_xlabel('Voltage [V]')
   ax.set_ylabel('Current [A]')
@@ -322,7 +330,7 @@ def plotSweep(i,v,fig):
   ax.legend(handles=[data, fit],loc=4)
   ax.set_xlim([vMin-onePercent,vMax+onePercent])
   ax.grid(b=True)
-  fig.canvas.draw()
+  ax.get_figure().canvas.draw()
   
 def printEventLog(sm):
   while True:
