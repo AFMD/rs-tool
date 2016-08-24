@@ -16,27 +16,26 @@ plt.switch_backend("Qt5Agg")
 #visa.log_to_screen() # for debugging
 #import timeit
 
-# some global variables defining how we'll talk to the instrument
-# ====for TCPIP comms====
-instrumentIP = ipaddress.ip_address('10.42.0.60') # IP address of sourcemeter
-fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
-deviceTimeout = 1000 # ms
-#fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
-openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_termination': u'\n'}
-
-# ====for serial rs232 comms=====
-#serialPort = "/dev/ttyUSB0"
-#fullAddress = "ASRL"+serialPort+"::INSTR"
-#deviceTimeout = 1000 # ms
-#sm = rm.open_resource(smAddress)
-#sm.set_visa_attribute(visa.constants.VI_ATTR_ASRL_BAUD,57600)
-#sm.set_visa_attribute(visa.constants.VI_ASRL_END_TERMCHAR,u'\r')
-#openParams = {'resource_name':fullAddress, 'timeout': deviceTimeout}
-
 
 def main():
   # create a visa resource manager
   rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
+  
+  # ====for TCPIP comms====
+  instrumentIP = ipaddress.ip_address('10.42.0.60') # IP address of sourcemeter
+  fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
+  deviceTimeout = 1000 # ms
+  #fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
+  openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_termination': u'\n'}
+  
+  # ====for serial rs232 comms=====
+  #serialPort = "/dev/ttyUSB0"
+  #fullAddress = "ASRL"+serialPort+"::INSTR"
+  #deviceTimeout = 1000 # ms
+  #sm = rm.open_resource(smAddress)
+  #sm.set_visa_attribute(visa.constants.VI_ATTR_ASRL_BAUD,57600)
+  #sm.set_visa_attribute(visa.constants.VI_ASRL_END_TERMCHAR,u'\r')
+  #openParams = {'resource_name':fullAddress, 'timeout': deviceTimeout}
   
   # form a connection to our sourcemeter
   sm = k2450.visaConnect(rm, openParams)

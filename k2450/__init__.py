@@ -1,6 +1,7 @@
 import sys
 import numpy
 import time # for finding the sample frequency
+import socket # this is for testing if a TCPIP connection is pre-existing
 
 def printEventLog(sm):
   while True:
@@ -18,6 +19,22 @@ def printEventLog(sm):
 # connects to a instrument/device given a resource manager and some open parameters
 def visaConnect (rm, openParams):
   print("Connecting to", openParams['resource_name'], "...")
+  if 'TCPIP::' in openParams['resource_name']:
+    ip = openParams['resource_name'].split('::')[1]
+    try: # let's try to open a connection to the instrument on port 1024 then 111...
+      s = socket.create_connection((ip,1024))
+      s.shutdown(socket.SHUT_RDWR)
+      s.close()
+      del(s)
+      s = socket.create_connection((ip,111))
+      s.shutdown(socket.SHUT_RDWR)
+      s.close()
+      del(s)
+    except:
+      print("Error: Unable to open a socket to", ip)
+      exctype, value = sys.exc_info()[:2]
+      print(value)
+      return None
   try:
     d = rm.open_resource(**openParams) # connect to device
   except:

@@ -103,6 +103,12 @@ class MainWindow(QtWidgets.QMainWindow):
     
     # for now put these here, should be initiated by user later:
     self.rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
+    # ====for TCPIP comms====
+    instrumentIP = ipaddress.ip_address('10.42.0.60') # IP address of sourcemeter
+    fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
+    deviceTimeout = 1000 # ms
+    #fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
+    openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_termination': u'\n'}    
     self.connectToKeithley(openParams)
     if self.sm is None:
       exit()
