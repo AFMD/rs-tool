@@ -21,8 +21,11 @@ import pyqtGen
 from PyQt5 import QtCore, QtGui, QtWidgets
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-# for print() overloading for the gui's log pane
+#========= start print override stuff =========
+# this stuff is for overriding print() so that
+# any calls to it are mirrored to my gui's log pane 
 import builtins as __builtin__
+systemPrint = __builtin__.print
 myPrinter = None
 import io
 class MyPrinter(QtCore.QObject): # a class that holds the signals we'll need for passing around the log data
@@ -33,12 +36,14 @@ def print(*args, **kwargs): # overload the print() function
   if myPrinter is not None: # check to see if the gui has created myPrinter
     stringBuf = io.StringIO()
     kwargs['file'] = stringBuf
-    __builtin__.print(*args, **kwargs) # print to our string buffer
-    myPrinter.writeToLog.emit(stringBuf.getvalue())
-    myPrinter.scrollLog.emit()
+    systemPrint(*args, **kwargs) # print to our string buffer
+    myPrinter.writeToLog.emit(stringBuf.getvalue()) # send the print to the gui
+    myPrinter.scrollLog.emit() # tell the gui to scroll the log
     stringBuf.close()
     kwargs['file'] = sys.stdout
-  return __builtin__.print(*args, **kwargs) # now do the print for rel
+  return systemPrint(*args, **kwargs) # now do the print for real
+__builtin__.print = print
+#========= end print override stuff =========
 
 # this is the thread where the sweep takes place
 class sweepThread(QtCore.QThread):
