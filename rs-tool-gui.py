@@ -143,6 +143,7 @@ class MainWindow(QtWidgets.QMainWindow):
     self.ui.visaAddressLineEdit.editingFinished.connect(lambda: self.settings.setValue('visaAddress',self.ui.visaAddressLineEdit.text()))
     self.ui.terminationLineEdit.editingFinished.connect(lambda: self.settings.setValue('termination',self.ui.terminationLineEdit.text()))
     self.ui.timeoutSpinBox.valueChanged.connect(lambda: self.settings.setValue('timeout',self.ui.timeoutSpinBox.value()))
+    
     self.ui.startVoltageDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('startVoltage',self.ui.startVoltageDoubleSpinBox.value()))
     self.ui.endVoltageDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('endVoltage',self.ui.endVoltageDoubleSpinBox.value()))
     self.ui.numberOfStepsSpinBox.valueChanged.connect(lambda: self.settings.setValue('numberOfSteps',self.ui.numberOfStepsSpinBox.value()))
@@ -165,6 +166,7 @@ class MainWindow(QtWidgets.QMainWindow):
     self.ui.stepDelayDoubleSpinBox.setEnabled(not isChecked)
   
   def applySweepValues(self):
+    #TODO: somehow detect that a user has changed a sweep parameter in the UI and they need to be resent to the sourcemeter
     if not self.setup:
       print("The sourcemeter has not been set up. We'll try that now.")
       self.connectToKeithley()
@@ -201,13 +203,16 @@ class MainWindow(QtWidgets.QMainWindow):
     #sm.set_visa_attribute(visa.constants.VI_ATTR_ASRL_BAUD,57600)
     #sm.set_visa_attribute(visa.constants.VI_ASRL_END_TERMCHAR,u'\r')
     #openParams = {'resource_name':fullAddress, 'timeout': deviceTimeout}
-    
-    self.openParams = {'resource_name': self.ui.visaAddressLineEdit.text(), 'timeout': self.ui.timeoutSpinBox.value(), '_read_termination': self.ui.terminationLineEdit.text()}    
-    self.sm = k2450.visaConnect(self.rm, self.openParams)
-    if self.sm is not None:
-      result = k2450.setup2450(self.sm)
-      if result is True:
-        self.setup = True
+    if (not self.setup):
+      self.openParams = {'resource_name': self.ui.visaAddressLineEdit.text(), 'timeout': self.ui.timeoutSpinBox.value(), '_read_termination': self.ui.terminationLineEdit.text().replace("\\n", '\n').replace("\\t",
+  '\t').replace("\\r",'\r')}
+      self.sm = k2450.visaConnect(self.rm, self.openParams)
+      if self.sm is not None:
+        result = k2450.setup2450(self.sm)
+        if result is True:
+          self.setup = True
+    else:
+      print('Already connected.')
     
   def scrollLog(self): # scrolls log to maximum position
     self.ui.textBrowser.verticalScrollBar().setValue(self.ui.textBrowser.verticalScrollBar().maximum())    
