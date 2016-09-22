@@ -78,7 +78,8 @@ def setup2450(sm):
   # setup for binary (superfast) data transfer
   sm.write(":FORMAT:DATA REAL")
   sm.values_format.container = numpy.array
-  sm.values_format.datatype = 'd'  
+  sm.values_format.datatype = 'd'
+  return True # setup completed properly
 
 # returns number of milliseconds to use for the sweep timeout value
 def estimateSweepTimeout(nPoints,stepDelay):
@@ -93,7 +94,7 @@ def estimateSweepTimeout(nPoints,stepDelay):
     localStepDelay = stepDelay
   return 500 + round(nPoints*(localStepDelay*1000+100))
   
-# setup 2450 for sweep
+# setup 2450 for sweep returns True on success
 def configureSweep(sm,sweepParams):
   sm.write(':SOURCE1:FUNCTION VOLTAGE')
   sm.write(':SOURCE1:VOLTAGE:RANGE {:}'.format(max(map(abs,[sweepParams['sweepStart'],sweepParams['sweepEnd']]))))
@@ -126,11 +127,21 @@ def configureSweep(sm,sweepParams):
   if stb is not '0':
     print ("Error: Non-zero status byte:", stb)
     printEventLog(sm)
-    return None
+    return False
   
   # setup the sweep
   sm.write(':SOURCE1:SWEEP:VOLTAGE:LINEAR {:}, {:}, {:}, {:}'.format(sweepParams['sweepStart'],sweepParams['sweepEnd'],sweepParams['nPoints'],sweepParams['stepDelay']))
+  
+  stb = sm.query('*STB?') # ask for the status byte
+  if stb is not '0':
+    print ("Error: Non-zero status byte:", stb)
+    printEventLog(sm)
+    return False
+  else:
+    return True
+  
 
+  
 def doSweep(sm):
   # check that things are cool before we do the sweep
   stb = sm.query('*STB?') # ask for the status byte

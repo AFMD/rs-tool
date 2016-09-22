@@ -33,16 +33,16 @@
     <item row="0" column="0">
      <widget class="QTabWidget" name="tehTabs">
       <property name="currentIndex">
-       <number>2</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="plotTab">
        <attribute name="title">
-        <string>Result Plot</string>
+        <string>Results</string>
        </attribute>
       </widget>
       <widget class="QWidget" name="sweepTab">
        <attribute name="title">
-        <string>Sweep Control</string>
+        <string>Sweep Parameters</string>
        </attribute>
        <layout class="QGridLayout" name="gridLayout_16">
         <item row="0" column="0">
@@ -83,7 +83,7 @@
              </widget>
             </item>
             <item row="1" column="1">
-             <widget class="QDoubleSpinBox" name="endVoltageVDoubleSpinBox">
+             <widget class="QDoubleSpinBox" name="endVoltageDoubleSpinBox">
               <property name="suffix">
                <string> mV</string>
               </property>
@@ -127,7 +127,7 @@
              </widget>
             </item>
             <item row="0" column="1">
-             <widget class="QDoubleSpinBox" name="currentLimitADoubleSpinBox">
+             <widget class="QDoubleSpinBox" name="currentLimitDoubleSpinBox">
               <property name="suffix">
                <string> mA</string>
               </property>
@@ -150,7 +150,7 @@
              </widget>
             </item>
             <item row="1" column="1">
-             <widget class="QDoubleSpinBox" name="stepDelaySDoubleSpinBox">
+             <widget class="QDoubleSpinBox" name="stepDelayDoubleSpinBox">
               <property name="enabled">
                <bool>false</bool>
               </property>
@@ -210,8 +210,8 @@
               <property name="bottomMargin">
                <number>15</number>
               </property>
-              <item row="1" column="1">
-               <widget class="QPushButton" name="pushButton_2">
+              <item row="1" column="0">
+               <widget class="QPushButton" name="applyButton">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                   <horstretch>0</horstretch>
@@ -219,20 +219,17 @@
                  </sizepolicy>
                 </property>
                 <property name="text">
-                 <string>Stop Sweep</string>
+                 <string>Apply</string>
+                </property>
+                <property name="autoDefault">
+                 <bool>true</bool>
                 </property>
                </widget>
               </item>
-              <item row="1" column="0">
-               <widget class="QPushButton" name="pushButton">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
+              <item row="1" column="1">
+               <widget class="QPushButton" name="sweepButton">
                 <property name="text">
-                 <string>Start Sweep</string>
+                 <string>Sweep</string>
                 </property>
                </widget>
               </item>
@@ -248,6 +245,123 @@
        <attribute name="title">
         <string>Instrument Connection</string>
        </attribute>
+       <layout class="QGridLayout" name="gridLayout_5">
+        <item row="0" column="0">
+         <layout class="QGridLayout" name="gridLayout_3">
+          <item row="0" column="0">
+           <layout class="QFormLayout" name="formLayout_3">
+            <property name="fieldGrowthPolicy">
+             <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+            </property>
+            <item row="0" column="0">
+             <widget class="QLabel" name="visaAddressLabel">
+              <property name="text">
+               <string>VISA Address</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLineEdit" name="visaAddressLineEdit">
+              <property name="text">
+               <string>TCPIP::192.168.1.207::INSTR</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="timeoutLabel">
+              <property name="text">
+               <string>Timeout</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QSpinBox" name="timeoutSpinBox">
+              <property name="suffix">
+               <string> ms</string>
+              </property>
+              <property name="maximum">
+               <number>100000</number>
+              </property>
+              <property name="value">
+               <number>1000</number>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="0" column="1">
+           <layout class="QFormLayout" name="formLayout_4">
+            <item row="0" column="0">
+             <widget class="QLabel" name="terminationLabel">
+              <property name="text">
+               <string>Termination</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLineEdit" name="terminationLineEdit">
+              <property name="text">
+               <string>\n</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+        <item row="1" column="0" alignment="Qt::AlignRight|Qt::AlignBottom">
+         <widget class="QWidget" name="widget_2" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_3">
+           <item>
+            <widget class="QWidget" name="widget_3" native="true">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <layout class="QGridLayout" name="gridLayout_6">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>15</number>
+              </property>
+              <property name="bottomMargin">
+               <number>15</number>
+              </property>
+              <item row="1" column="0">
+               <widget class="QPushButton" name="connectButton">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string>Connect</string>
+                </property>
+                <property name="autoDefault">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
       </widget>
      </widget>
     </item>

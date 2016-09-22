@@ -76,8 +76,34 @@ class sweepThread(QtCore.QThread):
 class MainWindow(QtWidgets.QMainWindow):
   def __init__(self):
     QtWidgets.QMainWindow.__init__(self)
+    
+    self.setup = False # to keep track of if the sourcemeter is setup or not
+    self.configured = False # to keep track of if the sweep is configured or not
+    
+    # Set up the user interface from Designer
     self.ui = pyqtGen.Ui_MainWindow()
     self.ui.setupUi(self)
+    
+    #recall settings
+    self.settings = QtCore.QSettings("greyltc", "rs-tool-gui")
+    if self.settings.contains('visaAddress'):
+      self.ui.visaAddressLineEdit.setText(self.settings.value('visaAddress'))
+    if self.settings.contains('readTermination'):
+      self.ui.terminationLineEdit.setText(self.settings.value('readTermination'))
+    if self.settings.contains('timeout'):
+      self.ui.timeoutSpinBox.setValue(int(self.settings.value('timeout')))
+    if self.settings.contains('startVoltage'):
+      self.ui.startVoltageDoubleSpinBox.setValue(float(self.settings.value('startVoltage')))
+    if self.settings.contains('endVoltage'):
+      self.ui.endVoltageDoubleSpinBox.setValue(float(self.settings.value('endVoltage')))
+    if self.settings.contains('numberOfSteps'):
+      self.ui.numberOfStepsSpinBox.setValue(int(self.settings.value('numberOfSteps')))
+    if self.settings.contains('currentLimit'):
+      self.ui.currentLimitDoubleSpinBox.setValue(float(self.settings.value('currentLimit')))
+    if self.settings.contains('stepDelay'):
+      self.ui.stepDelayDoubleSpinBox.setValue(float(self.settings.value('stepDelay')))
+    if self.settings.contains('autoDelay'):
+      self.ui.autoDelayCheckBox.setValue(self.settings.value('autoDelay'))    
     
     # tell the UI where to draw put matplotlib plots
     fig = plt.figure(facecolor="white")
@@ -86,6 +112,14 @@ class MainWindow(QtWidgets.QMainWindow):
     vBox = QtWidgets.QVBoxLayout()
     vBox.addWidget(FigureCanvas(fig))
     self.ui.plotTab.setLayout(vBox)
+    
+    self.sweepParams = {} # here we'll store the parameters that define our sweep
+    self.sweepParams['maxCurrent'] = 0.05 # amps
+    self.sweepParams['sweepStart'] = -0.003 # volts
+    self.sweepParams['sweepEnd'] = 0.003 # volts
+    self.sweepParams['nPoints'] = 101
+    self.sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
+    self.sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(self.sweepParams['nPoints'], self.sweepParams['stepDelay'])
     
     # set up things for our log pane
     global myPrinter
@@ -108,24 +142,26 @@ class MainWindow(QtWidgets.QMainWindow):
     fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
     deviceTimeout = 1000 # ms
     #fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
-    openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_termination': u'\n'}    
-    self.connectToKeithley(openParams)
-    if self.sm is None:
-      exit()
-
-    k2450.setup2450(self.sm)
-    
-    self.sweepParams = {} # here we'll store the parameters that define our sweep
-    self.sweepParams['maxCurrent'] = 0.05 # amps
-    self.sweepParams['sweepStart'] = -0.003 # volts
-    self.sweepParams['sweepEnd'] = 0.003 # volts
-    self.sweepParams['nPoints'] = 101
-    self.sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
-    self.sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(self.sweepParams['nPoints'], self.sweepParams['stepDelay'])
-    k2450.configureSweep(self.sm,self.sweepParams)
+    self.openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_termination': u'\n'}
     
     # connect up the sweep button
-    self.ui.pushButton.clicked.connect(self.doSweep)
+    self.ui.sweepButton.clicked.connect(self.doSweep)
+
+    # connect up the connect button
+    self.ui.connectButton.clicked.connect(lambda: self.connectToKeithley(openParams))
+    
+    # connect up the apply button
+    self.ui.applyButton.clicked.connect(self.applySweepValues)
+    
+    # save any changes the user makes
+    self.ui.visaAddressLineEdit.editingFinished.connect(lambda: self.settings.setValue('visaAddress',self.ui.visaAddressLineEdit.text()))
+    self.ui.terminationLineEdit.editingFinished.connect(lambda: self.settings.setValue('termination',self.ui.terminationLineEdit.text()))
+    self.ui.timeoutSpinBox.valueChanged.connect(lambda: self.settings.setValue('timeout',self.ui.timeoutSpinBox.value()))
+    self.ui.startVoltageDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('startVoltage',self.ui.startVoltageDoubleSpinBox.value()))
+    self.ui.endVoltageDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('endVoltage',self.ui.endVoltageDoubleSpinBox.value()))
+    self.ui.numberOfStepsSpinBox.valueChanged.connect(lambda: self.settings.setValue('numberOfSteps',self.ui.numberOfStepsSpinBox.value()))
+    self.ui.currentLimitDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('currentLimit',self.ui.currentLimitDoubleSpinBox.value()))
+    self.ui.stepDelayDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('stepDelay',self.ui.stepDelayDoubleSpinBox.value()))
     
     self.sweepThread = sweepThread(self)    
     
@@ -136,16 +172,32 @@ class MainWindow(QtWidgets.QMainWindow):
       print("Connection closed.")
     except:
       return
+  
+  def applySweepValues(self):
+    if not self.setup:
+      print("The sourcemeter has not been set up. We'll try that now.")
+      self.connectToKeithley()
+    if self.setup:
+      self.configured = k2450.configureSweep(self.sm,self.sweepParams)    
     
-  def connectToKeithley(self, openParams):
-    self.sm = k2450.visaConnect(self.rm, openParams)
+  def connectToKeithley(self):
+    self.sm = k2450.visaConnect(self.rm, self.openParams)
+    if self.sm is not None:
+      result = k2450.setup2450(self.sm)
+      if result is True:
+        self.setup = True
     
   def scrollLog(self): # scrolls log to maximum position
     self.ui.textBrowser.verticalScrollBar().setValue(self.ui.textBrowser.verticalScrollBar().maximum())    
     
   def doSweep(self):
-    self.ui.tehTabs.setCurrentIndex(0) # switch to plot tab
-    self.sweepThread.start()
+    if not self.configured:
+      print("The sweep has not been configured. We'll try that now.")
+      self.applySweepValues()
+    if self.configured:
+      self.sweepThread.start() 
+    #self.ui.tehTabs.setCurrentIndex(0) # switch to plot tab
+    
 
 # some global variables defining how we'll talk to the instrument
 # ====for TCPIP comms====
