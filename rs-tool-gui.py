@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # author: grey@christoforo.net
-import ipaddress
 import visa # https://github.com/hgrecco/pyvisa
 import numpy
 import sys
@@ -103,7 +102,8 @@ class MainWindow(QtWidgets.QMainWindow):
     if self.settings.contains('stepDelay'):
       self.ui.stepDelayDoubleSpinBox.setValue(float(self.settings.value('stepDelay')))
     if self.settings.contains('autoDelay'):
-      self.ui.autoDelayCheckBox.setValue(self.settings.value('autoDelay'))    
+      self.ui.autoDelayCheckBox.setChecked(self.settings.value('autoDelay') == 'true')
+      self.ui.stepDelayDoubleSpinBox.setEnabled(not self.ui.autoDelayCheckBox.isChecked())
     
     # tell the UI where to draw put matplotlib plots
     fig = plt.figure(facecolor="white")
@@ -112,14 +112,6 @@ class MainWindow(QtWidgets.QMainWindow):
     vBox = QtWidgets.QVBoxLayout()
     vBox.addWidget(FigureCanvas(fig))
     self.ui.plotTab.setLayout(vBox)
-    
-    self.sweepParams = {} # here we'll store the parameters that define our sweep
-    self.sweepParams['maxCurrent'] = 0.05 # amps
-    self.sweepParams['sweepStart'] = -0.003 # volts
-    self.sweepParams['sweepEnd'] = 0.003 # volts
-    self.sweepParams['nPoints'] = 101
-    self.sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
-    self.sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(self.sweepParams['nPoints'], self.sweepParams['stepDelay'])
     
     # set up things for our log pane
     global myPrinter
@@ -137,18 +129,12 @@ class MainWindow(QtWidgets.QMainWindow):
     
     # for now put these here, should be initiated by user later:
     self.rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
-    # ====for TCPIP comms====
-    instrumentIP = ipaddress.ip_address('10.42.0.60') # IP address of sourcemeter
-    fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
-    deviceTimeout = 1000 # ms
-    #fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
-    self.openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_termination': u'\n'}
     
     # connect up the sweep button
     self.ui.sweepButton.clicked.connect(self.doSweep)
 
     # connect up the connect button
-    self.ui.connectButton.clicked.connect(lambda: self.connectToKeithley(openParams))
+    self.ui.connectButton.clicked.connect(self.connectToKeithley)
     
     # connect up the apply button
     self.ui.applyButton.clicked.connect(self.applySweepValues)
@@ -162,7 +148,7 @@ class MainWindow(QtWidgets.QMainWindow):
     self.ui.numberOfStepsSpinBox.valueChanged.connect(lambda: self.settings.setValue('numberOfSteps',self.ui.numberOfStepsSpinBox.value()))
     self.ui.currentLimitDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('currentLimit',self.ui.currentLimitDoubleSpinBox.value()))
     self.ui.stepDelayDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('stepDelay',self.ui.stepDelayDoubleSpinBox.value()))
-    
+    self.ui.autoDelayCheckBox.stateChanged.connect(self.autoDelayStateChange)
     self.sweepThread = sweepThread(self)    
     
   def __del__(self):
@@ -172,15 +158,51 @@ class MainWindow(QtWidgets.QMainWindow):
       print("Connection closed.")
     except:
       return
+    
+  def autoDelayStateChange(self):
+    isChecked = self.ui.autoDelayCheckBox.isChecked()
+    self.settings.setValue('autoDelay',isChecked)
+    self.ui.stepDelayDoubleSpinBox.setEnabled(not isChecked)
   
   def applySweepValues(self):
     if not self.setup:
       print("The sourcemeter has not been set up. We'll try that now.")
       self.connectToKeithley()
     if self.setup:
+      self.sweepParams = {} # here we'll store the parameters that define our sweep
+      #self.sweepParams['maxCurrent'] = 0.05 # amps
+      #self.sweepParams['sweepStart'] = -0.003 # volts
+      #self.sweepParams['sweepEnd'] = 0.003 # volts
+      #self.sweepParams['nPoints'] = 101
+      #self.sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
+      self.sweepParams['maxCurrent'] = self.ui.currentLimitDoubleSpinBox.value()/1000 # amps
+      self.sweepParams['sweepStart'] = self.ui.startVoltageDoubleSpinBox.value()/1000 # volts
+      self.sweepParams['sweepEnd'] = self.ui.endVoltageDoubleSpinBox.value()/1000 # volts
+      self.sweepParams['nPoints'] = self.ui.numberOfStepsSpinBox.value()
+      self.sweepParams['stepDelay'] = self.ui.stepDelayDoubleSpinBox.value()/1000
+      if self.ui.autoDelayCheckBox.isChecked():
+        self.sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay) TODO: connect this to GUI
+      self.sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(self.sweepParams['nPoints'], self.sweepParams['stepDelay'])      
       self.configured = k2450.configureSweep(self.sm,self.sweepParams)    
     
   def connectToKeithley(self):
+    # ====for TCPIP comms====
+    #instrumentIP = ipaddress.ip_address('10.42.0.60') # IP address of sourcemeter
+    #fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
+    #deviceTimeout = 1000 # ms
+    #fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
+    #openParams = {'resource_name':fullAddress, 'timeout': deviceTimeout}  
+    
+    # ====for serial rs232 comms=====
+    #serialPort = "/dev/ttyUSB0"
+    #fullAddress = "ASRL"+serialPort+"::INSTR"
+    #deviceTimeout = 1000 # ms
+    #sm = rm.open_resource(smAddress)
+    #sm.set_visa_attribute(visa.constants.VI_ATTR_ASRL_BAUD,57600)
+    #sm.set_visa_attribute(visa.constants.VI_ASRL_END_TERMCHAR,u'\r')
+    #openParams = {'resource_name':fullAddress, 'timeout': deviceTimeout}
+    
+    self.openParams = {'resource_name': self.ui.visaAddressLineEdit.text(), 'timeout': self.ui.timeoutSpinBox.value(), '_read_termination': self.ui.terminationLineEdit.text()}    
     self.sm = k2450.visaConnect(self.rm, self.openParams)
     if self.sm is not None:
       result = k2450.setup2450(self.sm)
@@ -197,25 +219,6 @@ class MainWindow(QtWidgets.QMainWindow):
     if self.configured:
       self.sweepThread.start() 
     #self.ui.tehTabs.setCurrentIndex(0) # switch to plot tab
-    
-
-# some global variables defining how we'll talk to the instrument
-# ====for TCPIP comms====
-instrumentIP = ipaddress.ip_address('10.42.0.60') # IP address of sourcemeter
-fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
-deviceTimeout = 1000 # ms
-#fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
-openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_termination': u'\n'}
-
-# ====for serial rs232 comms=====
-#serialPort = "/dev/ttyUSB0"
-#fullAddress = "ASRL"+serialPort+"::INSTR"
-#deviceTimeout = 1000 # ms
-#sm = rm.open_resource(smAddress)
-#sm.set_visa_attribute(visa.constants.VI_ATTR_ASRL_BAUD,57600)
-#sm.set_visa_attribute(visa.constants.VI_ASRL_END_TERMCHAR,u'\r')
-#openParams = {'resource_name':fullAddress, 'timeout': deviceTimeout}
-
 
 def main():
   app = QtWidgets.QApplication(sys.argv)

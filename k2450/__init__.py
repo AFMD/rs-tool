@@ -22,7 +22,7 @@ def visaConnect (rm, openParams):
   if 'TCPIP::' in openParams['resource_name']:
     ip = openParams['resource_name'].split('::')[1]
     try: # let's try to open a connection to the instrument on port 1024 then 111...
-      s = socket.create_connection((ip,1024))
+      s = socket.create_connection((ip,1024),timeout=openParams['timeout']/1000)
       s.shutdown(socket.SHUT_RDWR)
       s.close()
       del(s)
