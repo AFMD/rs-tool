@@ -4,6 +4,7 @@ import time # for finding the sample frequency
 import socket # this is for testing if a TCPIP connection is pre-existing
 
 def printEventLog(sm):
+  errorCount = 0
   while True:
     errorString = sm.query(':SYSTEM:EVENTLOG:NEXT?')
     errorSplit = errorString.split('"')
@@ -11,10 +12,14 @@ def printEventLog(sm):
     if errorNum == 0:
       break # no error
     else:
+      errorCount = errorCount + 1
       errorSubSplit = errorSplit[1] # toss quotations
       errorSubSplit = errorSubSplit.split(';')
       print(errorSubSplit[2], errorSubSplit[0],"TYPE",errorSubSplit[1],)
   sm.write(':SYSTEM:CLEAR') # clear the logs since we've read them now
+  if errorCount == 0:
+    print('No errors in log.')
+    
 
 # connects to a instrument/device given a resource manager and some open parameters
 def visaConnect (rm, openParams):
@@ -148,12 +153,13 @@ def doSweep(sm):
   if stb is not '0':
     print ("Error: Non-zero status byte:", stb)
     printEventLog(sm)
-    return  
+    return False
   
   print ("Sweep initiated...")
   # trigger the sweep
   sm.write(':INITIATE:IMMEDIATE') #should be: sm.assert_trigger()
   sm.write('*WAI') # no other commands during this
+  return True
 
 def fetchSweepData(sm,sweepParams):
   oldTimeout = sm.timeout
@@ -175,6 +181,7 @@ def fetchSweepData(sm,sweepParams):
   
   # ask keithley to return its buffer
   values = sm.query_values ('TRACE:DATA? {:}, {:}, "defbuffer1", SOUR, READ'.format(1,sweepParams['nPoints']))
+  sm.write(":TRACE:CLEAR") # clear the buffer now that we've fetched it
 
   # reformat what we got back  
   values = values.reshape([-1,2])

@@ -51,26 +51,40 @@ class sweepThread(QtCore.QThread):
     self.mainWindow = mainWindow
 
   def run(self):
-    k2450.doSweep(self.mainWindow.sm)
-    # get the data
-    [i,v] = k2450.fetchSweepData(self.mainWindow.sm,self.mainWindow.sweepParams)
-    if i is not None:
+    self.mainWindow.ui.applyButton.setEnabled(False)
+    self.mainWindow.ui.sweepButton.setEnabled(False)
+    if not k2450.doSweep(self.mainWindow.sm):
+      print ("Failed to do forward sweep.")
+    else:
+      # get the forward data
+      [i,v] = k2450.fetchSweepData(self.mainWindow.sm,self.mainWindow.sweepParams)
       self.mainWindow.ax1.clear()
-      self.mainWindow.ax1.set_title('Forward Sweep Results',loc="right")
-      rs.plotSweep(i,v,self.mainWindow.ax1) # plot the sweep results
+      if i is not None:
+        self.mainWindow.ax1.set_title('Forward Sweep Results',loc="right")
+        rs.plotSweep(i,v,self.mainWindow.ax1) # plot the sweep results
+      else:
+        print("Failed to fetch forward sweep data.")
 
     # now do a reverse sweep
     reverseParams = self.mainWindow.sweepParams.copy()
     reverseParams['sweepStart'] = self.mainWindow.sweepParams['sweepEnd']
     reverseParams['sweepEnd'] = self.mainWindow.sweepParams['sweepStart']
-    k2450.configureSweep(self.mainWindow.sm,reverseParams)
-    k2450.doSweep(self.mainWindow.sm)
-    # get the data
-    [i,v] = k2450.fetchSweepData(self.mainWindow.sm,reverseParams)
-    if i is not None:
+    if not k2450.configureSweep(self.mainWindow.sm,reverseParams):
+      print ("Failed to configure reverse sweep.")
+    elif not k2450.doSweep(self.mainWindow.sm):
+      print ("Failed to do reverse sweep.")
+    else:
+      # get the reverse data
+      [i,v] = k2450.fetchSweepData(self.mainWindow.sm,reverseParams)
       self.mainWindow.ax2.clear()
-      self.mainWindow.ax2.set_title('Reverse Sweep Results',loc="right")
-      rs.plotSweep(i,v,self.mainWindow.ax2) # plot the sweep results  
+      if i is not None:
+        self.mainWindow.ax2.set_title('Reverse Sweep Results',loc="right")
+        rs.plotSweep(i,v,self.mainWindow.ax2) # plot the sweep results
+      else:
+        print("Failed to fetch reverse sweep data.")
+    print('======================================')
+    self.mainWindow.ui.applyButton.setEnabled(True)
+    self.mainWindow.ui.sweepButton.setEnabled(True)    
     
 class MainWindow(QtWidgets.QMainWindow):
   def __init__(self):
@@ -183,9 +197,13 @@ class MainWindow(QtWidgets.QMainWindow):
       self.sweepParams['nPoints'] = self.ui.numberOfStepsSpinBox.value()
       self.sweepParams['stepDelay'] = self.ui.stepDelayDoubleSpinBox.value()/1000
       if self.ui.autoDelayCheckBox.isChecked():
-        self.sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay) TODO: connect this to GUI
+        self.sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
       self.sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(self.sweepParams['nPoints'], self.sweepParams['stepDelay'])      
-      self.configured = k2450.configureSweep(self.sm,self.sweepParams)    
+      self.configured = k2450.configureSweep(self.sm,self.sweepParams)
+      if self.configured:
+        print('Sweep parameters applied.')
+      else:
+        print('Sweep parameters not applied.')
     
   def connectToKeithley(self):
     # ====for TCPIP comms====
