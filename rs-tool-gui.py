@@ -99,25 +99,21 @@ class MainWindow(QtWidgets.QMainWindow):
     
     #recall settings
     self.settings = QtCore.QSettings("greyltc", "rs-tool-gui")
-    if self.settings.contains('visaAddress'):
-      self.ui.visaAddressLineEdit.setText(self.settings.value('visaAddress'))
-    if self.settings.contains('readTermination'):
-      self.ui.terminationLineEdit.setText(self.settings.value('readTermination'))
-    if self.settings.contains('timeout'):
-      self.ui.timeoutSpinBox.setValue(int(self.settings.value('timeout')))
-    if self.settings.contains('startVoltage'):
-      self.ui.startVoltageDoubleSpinBox.setValue(float(self.settings.value('startVoltage')))
-    if self.settings.contains('endVoltage'):
-      self.ui.endVoltageDoubleSpinBox.setValue(float(self.settings.value('endVoltage')))
-    if self.settings.contains('numberOfSteps'):
-      self.ui.numberOfStepsSpinBox.setValue(int(self.settings.value('numberOfSteps')))
-    if self.settings.contains('currentLimit'):
-      self.ui.currentLimitDoubleSpinBox.setValue(float(self.settings.value('currentLimit')))
-    if self.settings.contains('stepDelay'):
-      self.ui.stepDelayDoubleSpinBox.setValue(float(self.settings.value('stepDelay')))
-    if self.settings.contains('autoDelay'):
-      self.ui.autoDelayCheckBox.setChecked(self.settings.value('autoDelay') == 'true')
-      self.ui.stepDelayDoubleSpinBox.setEnabled(not self.ui.autoDelayCheckBox.isChecked())
+    for thisKey in self.settings.allKeys():
+      if hasattr(self.ui,thisKey):
+        targetObject = getattr(self.ui,thisKey)
+        if type(targetObject) is QtWidgets.QLineEdit:
+          targetObject.setText(self.settings.value(thisKey))
+        elif (type(targetObject) is QtWidgets.QCheckBox):
+          targetObject.setCheckState(self.settings.value(thisKey,type=int))
+        elif (type(targetObject) is QtWidgets.QSpinBox):
+          targetObject.setValue(self.settings.value(thisKey,type=int))
+        elif type(targetObject) is QtWidgets.QDoubleSpinBox:
+          targetObject.setValue(self.settings.value(thisKey,type=float))
+        else:
+          print('Unexpected object type while loading settings.')
+
+    self.ui.stepDelayDoubleSpinBox.setEnabled(not self.ui.autoDelayCheckBox.isChecked())
     
     # tell the UI where to draw put matplotlib plots
     fig = plt.figure(facecolor="white")
@@ -154,17 +150,18 @@ class MainWindow(QtWidgets.QMainWindow):
     self.ui.applyButton.clicked.connect(self.applySweepValues)
     
     # save any changes the user makes
-    self.ui.visaAddressLineEdit.editingFinished.connect(lambda: self.settings.setValue('visaAddress',self.ui.visaAddressLineEdit.text()))
-    self.ui.terminationLineEdit.editingFinished.connect(lambda: self.settings.setValue('termination',self.ui.terminationLineEdit.text()))
-    self.ui.timeoutSpinBox.valueChanged.connect(lambda: self.settings.setValue('timeout',self.ui.timeoutSpinBox.value()))
-    
-    self.ui.startVoltageDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('startVoltage',self.ui.startVoltageDoubleSpinBox.value()))
-    self.ui.endVoltageDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('endVoltage',self.ui.endVoltageDoubleSpinBox.value()))
-    self.ui.numberOfStepsSpinBox.valueChanged.connect(lambda: self.settings.setValue('numberOfSteps',self.ui.numberOfStepsSpinBox.value()))
-    self.ui.currentLimitDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('currentLimit',self.ui.currentLimitDoubleSpinBox.value()))
-    self.ui.stepDelayDoubleSpinBox.valueChanged.connect(lambda: self.settings.setValue('stepDelay',self.ui.stepDelayDoubleSpinBox.value()))
+    self.ui.visaAddressLineEdit.editingFinished.connect(self.aSettingHasChanged)
+    self.ui.terminationLineEdit.editingFinished.connect(self.aSettingHasChanged)
+    self.ui.timeoutSpinBox.valueChanged.connect(self.aSettingHasChanged)    
+
+    self.ui.startVoltageDoubleSpinBox.valueChanged.connect(self.aSettingHasChanged)
+    self.ui.endVoltageDoubleSpinBox.valueChanged.connect(self.aSettingHasChanged)
+    self.ui.numberOfStepsSpinBox.valueChanged.connect(self.aSettingHasChanged)
+    self.ui.currentLimitDoubleSpinBox.valueChanged.connect(self.aSettingHasChanged)
+    self.ui.stepDelayDoubleSpinBox.valueChanged.connect(self.aSettingHasChanged)
+    self.ui.autoDelayCheckBox.stateChanged.connect(self.aSettingHasChanged)    
     self.ui.autoDelayCheckBox.stateChanged.connect(self.autoDelayStateChange)
-    self.sweepThread = sweepThread(self)    
+    self.sweepThread = sweepThread(self)
     
   def __del__(self):
     try:
@@ -173,6 +170,15 @@ class MainWindow(QtWidgets.QMainWindow):
       print("Connection closed.")
     except:
       return
+  
+  def aSettingHasChanged(self, newValue=None):
+    self.configured = False
+    sourceWidget = self.sender()
+    if (type(sourceWidget) is QtWidgets.QLineEdit) and (newValue is None): # this ensures we're not saving a line edit on every new char
+      self.settings.setValue(sourceWidget.objectName(),sourceWidget.text())
+    else:
+      self.settings.setValue(sourceWidget.objectName(),newValue) # save the key-value pair to our settings
+
     
   def autoDelayStateChange(self):
     isChecked = self.ui.autoDelayCheckBox.isChecked()
