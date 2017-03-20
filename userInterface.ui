@@ -33,7 +33,7 @@
     <item row="0" column="0">
      <widget class="QTabWidget" name="tehTabs">
       <property name="currentIndex">
-       <number>2</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="plotTab">
        <attribute name="title">
@@ -93,6 +93,12 @@
                  <property name="suffix">
                   <string> mV</string>
                  </property>
+                 <property name="minimum">
+                  <double>-20000.000000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>20000.000000000000000</double>
+                 </property>
                  <property name="value">
                   <double>3.000000000000000</double>
                  </property>
@@ -112,6 +118,26 @@
                  </property>
                  <property name="value">
                   <number>101</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="0">
+                <widget class="QLabel" name="nPLCLabel">
+                 <property name="text">
+                  <string>NPLC</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QDoubleSpinBox" name="nPLCDoubleSpinBox">
+                 <property name="minimum">
+                  <double>0.010000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>10.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>1.000000000000000</double>
                  </property>
                 </widget>
                </item>
@@ -138,7 +164,7 @@
                   <string> mA</string>
                  </property>
                  <property name="decimals">
-                  <number>1</number>
+                  <number>4</number>
                  </property>
                  <property name="maximum">
                   <double>1000.000000000000000</double>
@@ -184,6 +210,16 @@
                   <bool>true</bool>
                  </property>
                 </widget>
+               </item>
+               <item row="3" column="0">
+                <widget class="QLabel" name="autoZeroLabel">
+                 <property name="text">
+                  <string>Auto Zero</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QCheckBox" name="autoZeroCheckBox"/>
                </item>
               </layout>
              </item>
@@ -397,7 +433,7 @@
      <x>0</x>
      <y>0</y>
      <width>670</width>
-     <height>25</height>
+     <height>28</height>
     </rect>
    </property>
   </widget>

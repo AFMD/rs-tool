@@ -87,40 +87,53 @@ def setup2450(sm):
   return True # setup completed properly
 
 # returns number of milliseconds to use for the sweep timeout value
-def estimateSweepTimeout(nPoints,stepDelay):
+def estimateSweepTimeout(nPoints,stepDelay,nplc):
   # let's estimate how long the sweep will take so we know when to time out
   # here we assume one measurement takes no longer than 100ms
   # and the initial setup time is 500ms
   # this will break if NPLC and averaging are not their default values
-  # TODO: take into account NPLC and averaging to make a better estimate
+  # TODO: take into account averaging, autozero to make a better estimate
+  powerlineAssumption = 50 # Hz
+  cycleTime = 1/powerlineAssumption # seconds
+  fudgeFactor = 4 # don't know why I need this
+  measurementTime = nplc * cycleTime * fudgeFactor # seconds
   if stepDelay is -1:
     localStepDelay = 0
   else:
     localStepDelay = stepDelay
-  return 500 + round(nPoints*(localStepDelay*1000+100))
+  estimate = 500 + round(nPoints*(localStepDelay*1000+measurementTime*1000))
+  #print ('Sweep Estimate [ms]: {:}'.format(estimate))
+  return estimate
   
 # setup 2450 for sweep returns True on success
 def configureSweep(sm,sweepParams):
-  sm.write(':SOURCE1:FUNCTION VOLTAGE')
-  sm.write(':SOURCE1:VOLTAGE:RANGE {:}'.format(max(map(abs,[sweepParams['sweepStart'],sweepParams['sweepEnd']]))))
-  sm.write(':SOURCE1:VOLTAGE:ILIMIT {:}'.format(sweepParams['maxCurrent']))
-  sm.write(':SENSE1:FUNCTION "CURRENT"')
-  sm.write(':SENSE1:CURRENT:RANGE {:}'.format(sweepParams['maxCurrent']))
-  sm.write(':SENSE1:CURRENT:RSENSE ON') # rsense (remote sense) ON means four wire mode
+  sm.write(':SOURCE1:FUNCTION {:}'.format(sweepParams['sourceFun']))
+  sm.write(':SOURCE1:{:}:RANGE {:}'.format(sweepParams['sourceFun'],max(map(abs,[sweepParams['sweepStart'],sweepParams['sweepEnd']]))))
+  sm.write(':SOURCE1:{:}:ILIMIT {:}'.format(sweepParams['sourceFun'],sweepParams['maxCurrent']))
+  sm.write(':SENSE1:FUNCTION "{:}"'.format(sweepParams['senseFun']))
+  sm.write(':SENSE1:{:}:RANGE {:}'.format(sweepParams['senseFun'],sweepParams['maxCurrent']))
+  if sweepParams['fourWire']:
+    sm.write(':SENSE1:{:}:RSENSE ON'.format(sweepParams['senseFun']))# rsense (remote voltage sense) ON means four wire mode
+  else:
+    sm.write(':SENSE1:{:}:RSENSE OFF'.format(sweepParams['senseFun']))# rsense (remote voltage sense) ON means four wire mode
   sm.write(':ROUTE:TERMINALS FRONT')
-  sm.write(':SOURCE1:VOLTAGE:LEVEL:IMMEDIATE:AMPLITUDE {:}'.format(sweepParams['sweepStart'])) # set output to sweep start voltage
+  sm.write(':SOURCE1:{:}:LEVEL:IMMEDIATE:AMPLITUDE {:}'.format(sweepParams['sourceFun'],sweepParams['sweepStart'])) # set output to sweep start voltage
   
   # do one auto zero manually (could take over a second)
   oldTimeout = sm.timeout
-  sm.timeout = 5000  
-  sm.write(':SENSE1:AZERO:ONCE') # do one autozero now
+  sm.timeout = 5000
+  if not sweepParams['autoZero']:
+    sm.write(':SENSE1:AZERO:ONCE') # do one autozero now
+    sm.write(':SENSE1:{:}:AZERO OFF'.format(sweepParams['senseFun']))
+  else:
+    sm.write(':SENSE1:{:}:AZERO ON'.format(sweepParams['senseFun'])) # do autozero on every measurement
   sm.write('*WAI') # no other commands during this
   opc = sm.query('*OPC?') # wait for the operation to complete
   sm.timeout=oldTimeout  
   
   # here are a few settings that trade accuracy for speed
   #sm.write(':SENSE1:CURRENT:AZERO:STATE 0') # disable autozero for future readings
-  #sm.write(':SENSE1:CURRENT:NPLC 0.01') # set NPLC
+  sm.write(':SENSE1:NPLC {:}'.format(sweepParams['nplc'])) # set NPLC
   #sm.write(':SOURCE1:VOLTAGE:READ:BACK OFF') # disable voltage readback
   
   # turn on the source and wait for it to settle
@@ -128,20 +141,15 @@ def configureSweep(sm,sweepParams):
   sm.write('*WAI') # no other commands during this
   opc = sm.query('*OPC?') # wait for the operation to complete
   
-  stb = sm.query('*STB?') # ask for the status byte
-  if stb is not '0':
-    print ("Error: Non-zero status byte:", stb)
-    printEventLog(sm)
+  if checkStatus(sm):
     return False
   
   # setup the sweep
-  sm.write(':SOURCE1:SWEEP:VOLTAGE:LINEAR {:}, {:}, {:}, {:}'.format(sweepParams['sweepStart'],sweepParams['sweepEnd'],sweepParams['nPoints'],sweepParams['stepDelay']))
+  sm.write(':SOURCE1:SWEEP:{:}:LINEAR {:}, {:}, {:}, {:}'.format(sweepParams['sourceFun'],sweepParams['sweepStart'],sweepParams['sweepEnd'],sweepParams['nPoints'],sweepParams['stepDelay']))
   
   stb = sm.query('*STB?') # ask for the status byte
-  if stb is not '0':
-    print ("Error: Non-zero status byte:", stb)
-    printEventLog(sm)
-    return False
+  if checkStatus(sm):
+    return False  
   else:
     return True
   
@@ -149,10 +157,7 @@ def configureSweep(sm,sweepParams):
   
 def doSweep(sm):
   # check that things are cool before we do the sweep
-  stb = sm.query('*STB?') # ask for the status byte
-  if stb is not '0':
-    print ("Error: Non-zero status byte:", stb)
-    printEventLog(sm)
+  if checkStatus(sm):
     return False
   
   print ("Sweep initiated...")
@@ -160,6 +165,17 @@ def doSweep(sm):
   sm.write(':INITIATE:IMMEDIATE') #should be: sm.assert_trigger()
   sm.write('*WAI') # no other commands during this
   return True
+
+# returns true if event
+def checkStatus(sm):
+  stb = int(sm.query('*STB?')) # ask for the status byte
+  if stb not in(0,64):
+    print ("Status byte value:", stb)
+    printEventLog(sm)
+    return True
+  else:
+    return False
+    
 
 def fetchSweepData(sm,sweepParams):
   oldTimeout = sm.timeout

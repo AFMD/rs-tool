@@ -4,6 +4,7 @@ import ipaddress
 import visa # https://github.com/hgrecco/pyvisa
 import numpy
 import sys
+import time
 
 import k2450 # functions to talk to a keithley 2450 sourcemeter
 import rs # grey's sheet resistance library
@@ -22,7 +23,7 @@ def main():
   rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
   
   # ====for TCPIP comms====
-  instrumentIP = ipaddress.ip_address('10.42.0.60') # IP address of sourcemeter
+  instrumentIP = ipaddress.ip_address('192.168.1.204') # IP address of sourcemeter
   fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
   deviceTimeout = 1000 # ms
   #fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
@@ -46,16 +47,31 @@ def main():
   k2450.setup2450(sm)
   
   sweepParams = {} # here we'll store the parameters that define our sweep
-  sweepParams['maxCurrent'] = 0.05 # amps
+  sweepParams['maxCurrent'] = 0.005 # amps
   sweepParams['sweepStart'] = -0.003 # volts
   sweepParams['sweepEnd'] = 0.003 # volts
+  # for very unconductive samples
+  #sweepParams['maxCurrent'] = 0.00001 # amps
+  #sweepParams['sweepStart'] = -15 # volts
+  #sweepParams['sweepEnd'] = 15 # volts
+  
   sweepParams['nPoints'] = 101
+  sweepParams['sourceFun'] = 'voltage'
+  sweepParams['senseFun'] = 'current'
+  sweepParams['fourWire'] = True
+  sweepParams['nplc'] = 1 # intigration time (in number of power line cycles)
+  sweepParams['autoZero'] = False
   sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
-  sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(sweepParams['nPoints'], sweepParams['stepDelay'])
+  sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(sweepParams['nPoints'], sweepParams['stepDelay'], sweepParams['nplc'])
   k2450.configureSweep(sm,sweepParams)
+  
+  time.sleep(5)
+  
   
   # initiate the forward sweep
   k2450.doSweep(sm)
+  
+  #sm.write(':SOURCE1:VOLTAGE:LEVEL:IMMEDIATE:AMPLITUDE {:}'.format(sweepParams['sweepStart']))
   # get the data
   [i,v] = k2450.fetchSweepData(sm,sweepParams)
   
@@ -68,9 +84,12 @@ def main():
     plt.show(block=False)
   
   # setup for reverse sweep
-  sweepParams['sweepStart'] = 0.003 # volts
-  sweepParams['sweepEnd'] = -0.003 # volts
+  newEnd = sweepParams['sweepStart']
+  newStart = sweepParams['sweepEnd']
+  sweepParams['sweepStart'] = newStart # volts
+  sweepParams['sweepEnd'] = newEnd # volts
   k2450.configureSweep(sm,sweepParams)
+  time.sleep(5)
   # initiate the reverse sweep
   k2450.doSweep(sm)
   # get the data

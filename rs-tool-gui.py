@@ -3,6 +3,7 @@
 import visa # https://github.com/hgrecco/pyvisa
 import numpy
 import sys
+import time
 
 import k2450 # functions to talk to a keithley 2450 sourcemeter
 import rs # grey's sheet resistance library
@@ -69,7 +70,10 @@ class sweepThread(QtCore.QThread):
     reverseParams = self.mainWindow.sweepParams.copy()
     reverseParams['sweepStart'] = self.mainWindow.sweepParams['sweepEnd']
     reverseParams['sweepEnd'] = self.mainWindow.sweepParams['sweepStart']
-    if not k2450.configureSweep(self.mainWindow.sm,reverseParams):
+    confRes = k2450.configureSweep(self.mainWindow.sm,reverseParams)
+    if confRes:
+      time.sleep(5)
+    if not confRes:
       print ("Failed to configure reverse sweep.")
     elif not k2450.doSweep(self.mainWindow.sm):
       print ("Failed to do reverse sweep.")
@@ -158,9 +162,12 @@ class MainWindow(QtWidgets.QMainWindow):
     self.ui.endVoltageDoubleSpinBox.valueChanged.connect(self.aSettingHasChanged)
     self.ui.numberOfStepsSpinBox.valueChanged.connect(self.aSettingHasChanged)
     self.ui.currentLimitDoubleSpinBox.valueChanged.connect(self.aSettingHasChanged)
+    self.ui.nPLCDoubleSpinBox.valueChanged.connect(self.aSettingHasChanged)
+    
     self.ui.stepDelayDoubleSpinBox.valueChanged.connect(self.aSettingHasChanged)
     self.ui.autoDelayCheckBox.stateChanged.connect(self.aSettingHasChanged)    
     self.ui.autoDelayCheckBox.stateChanged.connect(self.autoDelayStateChange)
+    self.ui.autoZeroCheckBox.stateChanged.connect(self.aSettingHasChanged)
     self.sweepThread = sweepThread(self)
     
   def __del__(self):
@@ -202,9 +209,20 @@ class MainWindow(QtWidgets.QMainWindow):
       self.sweepParams['sweepEnd'] = self.ui.endVoltageDoubleSpinBox.value()/1000 # volts
       self.sweepParams['nPoints'] = self.ui.numberOfStepsSpinBox.value()
       self.sweepParams['stepDelay'] = self.ui.stepDelayDoubleSpinBox.value()/1000
+      
+      self.sweepParams['sourceFun'] = 'voltage'
+      self.sweepParams['senseFun'] = 'current'
+      self.sweepParams['fourWire'] = True
+      self.sweepParams['nplc'] = self.ui.nPLCDoubleSpinBox.value() # intigration time (in number of power line cycles)
+      
+      if self.ui.autoZeroCheckBox.isChecked():
+        self.sweepParams['autoZero'] = True
+      else:
+        self.sweepParams['autoZero'] = False
+      
       if self.ui.autoDelayCheckBox.isChecked():
         self.sweepParams['stepDelay'] = -1 # seconds (-1 for auto, nearly zero, delay)
-      self.sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(self.sweepParams['nPoints'], self.sweepParams['stepDelay'])      
+      self.sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(self.sweepParams['nPoints'], self.sweepParams['stepDelay'],self.sweepParams['nplc'])      
       self.configured = k2450.configureSweep(self.sm,self.sweepParams)
       if self.configured:
         print('Sweep parameters applied.')
@@ -246,6 +264,8 @@ class MainWindow(QtWidgets.QMainWindow):
       print("The sweep has not been configured. We'll try that now.")
       self.applySweepValues()
     if self.configured:
+      print("Waiting 5 seconds before we start the sweep...")
+      time.sleep(5)
       self.sweepThread.start() 
     #self.ui.tehTabs.setCurrentIndex(0) # switch to plot tab
 
