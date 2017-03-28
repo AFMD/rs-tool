@@ -2,6 +2,34 @@ import sys
 import numpy
 import time # for finding the sample frequency
 import socket # this is for testing if a TCPIP connection is pre-existing
+import types
+import struct
+
+MSB = 1<<0 # message summary bit
+EAV = 1<<2 # error available bit
+QSB = 1<<3 # questionable summary bit
+MAV = 1<<4 # message available bit
+ESB = 1<<5 # event summary bit
+MSS = 1<<6 # master summary status bit
+OSB = 1<<7 # operation summary bit
+
+def printErrors(sm):
+  errorCount = int(sm.query(':SYSTem:ERRor:COUNt?'))
+  while errorCount > 0:
+    print(sm.query('SYST:ERR:NEXT?'))
+    errorCount = int(sm.query(':SYSTem:ERRor:COUNt?'))
+    
+def printEvents(sm):
+  eventCount = int(sm.query(':SYSTem:EVENtlog:COUNt?'))
+  while eventCount > 0:
+    print(sm.query('SYSTem:EVENtlog:NEXT?'))
+    eventCount = int(sm.query(':SYSTem:EVENtlog:COUNt?'))  
+    
+def printErrors(sm):
+  errorCount = int(sm.query(':SYSTem:ERRor:COUNt?'))
+  while errorCount > 0:
+    print(sm.query('SYST:ERR:NEXT?'))
+    errorCount = int(sm.query(':SYSTem:ERRor:COUNt?'))
 
 def printEventLog(sm):
   errorCount = 0
@@ -19,6 +47,86 @@ def printEventLog(sm):
   sm.write(':SYSTEM:CLEAR') # clear the logs since we've read them now
   if errorCount == 0:
     print('No errors in log.')
+
+
+
+class socketConn:
+  def __init__(self, s=None):
+    self.s = s
+    self.termChar = b'\n'
+    self.decode = 'utf-8'
+    self.getLen = 4096
+    self.values_format = types.SimpleNamespace()
+    self.values_format.container = numpy.array
+    self.values_format.datatype = 'd'
+    self.timeout = s.timeout
+    try: # this will clear all pending data
+      rcv = None
+      while rcv == b'':
+        rcv = s.recv(self.getLen)
+    except:
+      pass
+  
+
+    
+  def __del__(self):
+    self.s.shutdown(socket.SHUT_RDWR)
+    self.s.close()
+    del(self.s)
+  
+  # serial poll routine until we get one of the requested status bits set
+  # or until a non-zero status byte or until we timeout
+  def spoll(self, request):
+    byte = int(self.query('*STB?'))
+    start = time.time()
+    elapsed = time.time() - start
+    while (not byte & request) and elapsed < self.timeout:
+      byte = int(self.query('*STB?'))
+      print(byte)
+      if byte & (MAV | EAV): # handle events
+        printEvents(self)
+      elapsed = time.time() - start
+    return byte
+  
+  def write(self,string):
+    toSend = bytes(string,self.decode) + self.termChar
+    #nToSend = len(toSend)
+    ret = self.s.sendall(toSend)
+    if ret == None:
+      return True
+    else:
+      return False
+  
+  def read(self,string=True):
+    self.s.setblocking(False)
+    buf = b''
+    while self.termChar not in buf:
+      try:
+        buf += self.s.recv(self.getLen)
+      except BlockingIOError:
+        pass
+    self.s.setblocking(True)
+    if string == True:
+      ret = buf.decode(self.decode)
+      return ret.rstrip()
+    else:
+      return buf.rstrip().lstrip(b'#0')
+    
+  def query(self,string):
+    if self.write(string):
+      return self.read()
+    else:
+      return None
+    
+  def query_values(self,string):
+    buf = b''
+    if self.write(string):
+      result = self.read(string=False)
+      unpacker = struct.iter_unpack('d',result)
+      return numpy.array(list(unpacker))
+    else:
+      return None    
+    
     
 
 # connects to a instrument/device given a resource manager and some open parameters
@@ -26,7 +134,11 @@ def visaConnect (rm, openParams):
   print("Connecting to", openParams['resource_name'], "...")
   if 'TCPIP::' in openParams['resource_name']:
     ip = openParams['resource_name'].split('::')[1]
-    try: # let's try to open a connection to the instrument on port 1024 then 111...
+    try: # let's try to open a connection to the instrument on port 5025 (SOCKET), 1024(VXI-11) then 111...
+      s = socket.create_connection((ip,5030),timeout=openParams['timeout']/1000) # dead socket kills all previous connections
+      s.shutdown(socket.SHUT_RDWR)
+      s.close()
+      del(s)      
       s = socket.create_connection((ip,1024),timeout=openParams['timeout']/1000)
       s.shutdown(socket.SHUT_RDWR)
       s.close()
@@ -35,19 +147,46 @@ def visaConnect (rm, openParams):
       s.shutdown(socket.SHUT_RDWR)
       s.close()
       del(s)
+      s = socket.create_connection((ip,5025))
+      s.shutdown(socket.SHUT_RDWR)
+      s.close()
+      del(s)      
     except:
       print("Error: Unable to open a socket to", ip)
       exctype, value = sys.exc_info()[:2]
       print(value)
+      return None   
+  if 'SOCKET' in openParams['resource_name']:
+    s = socket.create_connection((ip,5025),timeout=openParams['timeout']/1000) # open a socket
+    d = socketConn(s)
+  else:
+    try:
+      d = rm.open_resource(**openParams) # connect to device
+    except:
+      print("Unable to connect via", openParams['resource_name'])
+      exctype, value = sys.exc_info()[:2]
+      print(value)
       return None
+  print("Connection established.")
+  
+  print("Resetting Device...")
   try:
-    d = rm.open_resource(**openParams) # connect to device
+    res = d.query("*RST; *CLS; *ESE 32; *OPC?")
+    if res is not '1':
+      raise
+    print("Done.")
   except:
-    print("Unable to connect via", openParams['resource_name'])
+    print("Unable perform device reset")
     exctype, value = sys.exc_info()[:2]
     print(value)
+    try:
+      d.close()
+    except:
+      pass
     return None
-  print("Connection established.")
+  
+  #byte = int(d.query('*STB?'))
+  #pollret = d.spoll(OSB)
   
   print("Querying device type...")
   try:
@@ -95,15 +234,71 @@ def estimateSweepTimeout(nPoints,stepDelay,nplc):
   # TODO: take into account averaging, autozero to make a better estimate
   powerlineAssumption = 50 # Hz
   cycleTime = 1/powerlineAssumption # seconds
-  fudgeFactor = 4 # don't know why I need this
+  fudgeFactor = 10 # don't know why I need this
   measurementTime = nplc * cycleTime * fudgeFactor # seconds
   if stepDelay is -1:
     localStepDelay = 0
   else:
     localStepDelay = stepDelay
   estimate = 500 + round(nPoints*(localStepDelay*1000+measurementTime*1000))
-  #print ('Sweep Estimate [ms]: {:}'.format(estimate))
+  print ('Sweep Estimate [ms]: {:}'.format(estimate))
   return estimate
+
+# sweep through some source current values and measure v to find R
+def rSweep(sm, rsOpt):
+  sm.write('SENSE:NPLC {:}'.format(rsOpt['nplc']))
+  sm.write('SENSe:FUNCtion "VOLT"')
+  sm.write('SENSe:VOLTage:RANGe:AUTO ON')
+  sm.write('SENSe:VOLTage:UNIT OHM')
+  
+  if rOpt['oCom']:
+    sm.write('SENSe:CURRent:OCOM ON')
+  else:
+    sm.write('SENSe:CURRent:OCOM OFF')
+  
+  if rOpt['fourWire']:
+    sm.write(':SENSE1:RESistance:RSENSE ON')# rsense (remote voltage sense) ON means four wire mode
+  else:
+    sm.write(':SENSE:RESistance:RSENSE OFF')# rsense (remote voltage sense) ON means four wire mode
+    
+  sm.write('SOURce:FUNCtion CURR')
+  sm.write('SOURce:CURRent {:}'.format(rsOpt['iMax']))
+  sm.write('SOURce:CURRent:VLIM {:}'.format(rsOpt['vLim']))
+  preCount = 10
+  sm.write('SENSe:COUNt {:}'.format(preCount))
+  sm.write('OUTPut ON')
+  sm.write('TRACe:TRIGger "defbuffer1"')
+  values = sm.query_values('TRACe:DATA? 1, {:}, "defbuffer1", SOUR, READ'.format(rOpt['n']))
+  
+  
+
+# returns n auto ohms measurements
+def measureR(sm, rOpt):
+  #sm.write('*RST')
+  
+  sm.write('SENSE:NPLC {:}'.format(rOpt['nplc']))
+  sm.write('SENSe:FUNCtion "RES"')
+  sm.write('SENSe:RESistance:RANGe:AUTO ON')
+  sm.write('SENSe:RESistance:OCOMpensated ON')
+  sm.write('SENSe:COUNt {:}'.format(rOpt['n']))
+  
+  if rOpt['fourWire']:
+    sm.write(':SENSE1:RESistance:RSENSE ON')# rsense (remote voltage sense) ON means four wire mode
+  else:
+    sm.write(':SENSE:RESistance:RSENSE OFF')# rsense (remote voltage sense) ON means four wire mode
+  
+  sm.write('OUTPut ON')
+  time.sleep(1)
+  sm.write('TRACe:TRIGger "defbuffer1"')
+  sm.timeout = 500
+  #pollRet = sm.spoll(ESB)
+  values = sm.query_values('TRACe:DATA? 1, {:}, "defbuffer1", SOUR, READ'.format(rOpt['n']))
+  autoSenseCurrent = float(sm.query("source:current:level?"))
+  sm.write('source:current:level {:}'.format(autoSenseCurrent*-1))
+  sm.write('OUTPut OFF')
+  values = values.reshape([rOpt['n'],2])
+  r = values[:,1]
+  return r
   
 # setup 2450 for sweep returns True on success
 def configureSweep(sm,sweepParams):
@@ -145,7 +340,7 @@ def configureSweep(sm,sweepParams):
     return False
   
   # setup the sweep
-  sm.write(':SOURCE1:SWEEP:{:}:LINEAR {:}, {:}, {:}, {:}'.format(sweepParams['sourceFun'],sweepParams['sweepStart'],sweepParams['sweepEnd'],sweepParams['nPoints'],sweepParams['stepDelay']))
+  sm.write(':SOURCE1:SWEEP:{:}:LINEAR {:}, {:}, {:}, {:}, 1, {:}, {:}, {:}'.format(sweepParams['sourceFun'],sweepParams['sweepStart'],sweepParams['sweepEnd'],sweepParams['nPoints'],sweepParams['stepDelay'],sweepParams['rangeType'],sweepParams['failAbort'],sweepParams['dual']))
   
   stb = sm.query('*STB?') # ask for the status byte
   if checkStatus(sm):
