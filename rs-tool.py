@@ -21,8 +21,8 @@ plt.switch_backend("Qt5Agg")
 def main():
   
   # ====for TCPIP comms====
-  instrumentIP = ipaddress.ip_address('172.17.3.60')
-  #instrumentIP = ipaddress.ip_address('192.168.1.204') # IP address of sourcemeter
+  #instrumentIP = ipaddress.ip_address('172.17.3.60')
+  instrumentIP = ipaddress.ip_address('192.168.1.204') # IP address of sourcemeter
   #fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
   fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
   deviceTimeout = 1000 # ms
@@ -88,57 +88,48 @@ def main():
   
   rsOpt = {}
   rsOpt['fourWire'] = True
+  rsOpt['autoZero'] = True
   rsOpt['nplc'] = 10
-  rsOpt['iMax'] = 1e-6
+  rsOpt['iMax'] = 1e-9
   rsOpt['vLim'] = 2
   rsOpt['nPoints'] = 21
   rsOpt['oCom'] = True
+  rsOpt['failAbort'] = 'OFF'
+  #rsOpt['stepDelay'] = '-1' # in seconds, -1 is auto delay
+  rsOpt['stepDelay'] = '1' # in seconds, -1 is auto delay
+  if k2450.rSweep(sm,rsOpt):
+    # initiate the sweeps
+    k2450.doSweep(sm)    
+    [i,v,i2,v2] = k2450.fetchSweepData(sm,rsOpt)
+    
+    fig = plt.figure() # make a figure to put the plot into
+    if i is not None:
+      ax = fig.add_subplot(2,1,1)
+      ax.clear()
+      ax.set_title('Forward Sweep Results',loc="right")
+      rs.plotSweep(i,v,ax) # plot the sweep results
+      plt.show(block=False)
+    
+    # setup for reverse sweep
+    #newEnd = sweepParams['sweepStart']
+    #newStart = sweepParams['sweepEnd']
+    #sweepParams['sweepStart'] = newStart # volts
+    #sweepParams['sweepEnd'] = newEnd # volts
+    #k2450.configureSweep(sm,sweepParams)
+    #time.sleep(sleepTime)
+    # initiate the reverse sweep
+    #k2450.doSweep(sm)
+    # get the data
+    #[i,v] = k2450.fetchSweepData(sm,sweepParams)
+    
+    if i is not None:
+      ax = fig.add_subplot(2,1,2)
+      ax.clear()
+      ax.set_title('Reverse Sweep Results',loc="right")
+      rs.plotSweep(i2,v2,ax) # plot the sweep results
+      plt.show()  
   
-  r = k2450.measureR(sm,rOpt)
-  rS = float(r[4]*math.pi/math.log(2))
-  rSString = "R_s= {:0.6g}".format(rS) + u" [\u03A9/\u25AB]"
-  print (rSString)  
-  
-  #k2450.configureSweep(sm,sweepParams)
-  
-  #time.sleep(sleepTime)
-  
-  
-  # initiate the forward sweep
-  #k2450.doSweep(sm)
-  
-  #sm.write(':SOURCE1:VOLTAGE:LEVEL:IMMEDIATE:AMPLITUDE {:}'.format(sweepParams['sweepStart']))
-  # get the data
-  [i,v] = k2450.fetchSweepData(sm,sweepParams)
-  
-  fig = plt.figure() # make a figure to put the plot into
-  if i is not None:
-    ax = fig.add_subplot(2,1,1)
-    ax.clear()
-    ax.set_title('Forward Sweep Results',loc="right")
-    rs.plotSweep(i,v,ax) # plot the sweep results
-    plt.show(block=False)
-  
-  # setup for reverse sweep
-  newEnd = sweepParams['sweepStart']
-  newStart = sweepParams['sweepEnd']
-  sweepParams['sweepStart'] = newStart # volts
-  sweepParams['sweepEnd'] = newEnd # volts
-  k2450.configureSweep(sm,sweepParams)
-  time.sleep(sleepTime)
-  # initiate the reverse sweep
-  k2450.doSweep(sm)
-  # get the data
-  [i,v] = k2450.fetchSweepData(sm,sweepParams)
-  
-  if i is not None:
-    ax = fig.add_subplot(2,1,2)
-    ax.clear()
-    ax.set_title('Reverse Sweep Results',loc="right")
-    rs.plotSweep(i,v,ax) # plot the sweep results
-    plt.show()  
-  
-  print("Closing connection to", sm._logging_extra['resource_name'],"...")
+  print("Closing connection to sourcemeter...")
   sm.close() # close connection
   print("Connection closed.")
 
