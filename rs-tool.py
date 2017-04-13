@@ -90,8 +90,8 @@ def main():
   rsOpt['fourWire'] = True
   rsOpt['autoZero'] = True
   rsOpt['nplc'] = 10
-  rsOpt['iMax'] = 1e-9
-  rsOpt['vLim'] = 2
+  rsOpt['iMax'] = 5e-9
+  rsOpt['vLim'] = 50
   rsOpt['nPoints'] = 21
   rsOpt['oCom'] = True
   rsOpt['failAbort'] = 'OFF'

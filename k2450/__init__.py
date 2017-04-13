@@ -286,7 +286,10 @@ def rSweep(sm, rsOpt):
     
   sm.write('SOURce:FUNCtion CURR')
   if rsOpt['stepDelay'] != '-1':
+    sm.write('SOURce:CURRent:DELAY:AUTO OFF')
     sm.write('SOURce:CURRent:DELAY {:}'.format(float(rsOpt['stepDelay'])))
+  else:
+    sm.write('SOURce:CURRent:DELAY:AUTO ON')
   sm.write('SOURce:CURRent {:}'.format(rsOpt['iMax']))
   sm.write('SOURce:CURRent:VLIM {:}'.format(rsOpt['vLim']))
   preCount = 10
