@@ -89,14 +89,17 @@ def main():
   rsOpt = {}
   rsOpt['fourWire'] = True
   rsOpt['autoZero'] = True
-  rsOpt['nplc'] = 10
-  rsOpt['iMax'] = 5e-9
-  rsOpt['vLim'] = 50
+  #rsOpt['nplc'] = 10
+  #rsOpt['iMax'] = 5e-9
+  #rsOpt['vLim'] = 50
+  rsOpt['nplc'] = 5
+  rsOpt['iMax'] = 1e-3
+  rsOpt['vLim'] = 0.2
   rsOpt['nPoints'] = 21
   rsOpt['oCom'] = True
   rsOpt['failAbort'] = 'OFF'
-  #rsOpt['stepDelay'] = '-1' # in seconds, -1 is auto delay
-  rsOpt['stepDelay'] = '1' # in seconds, -1 is auto delay
+  rsOpt['stepDelay'] = '-1' # in seconds, -1 is auto delay
+  #rsOpt['stepDelay'] = '1' # in seconds, -1 is auto delay
   if k2450.rSweep(sm,rsOpt):
     # initiate the sweeps
     k2450.doSweep(sm)    
