@@ -75,16 +75,17 @@ def main():
   sweepParams['stepDelay'] = 2 # ms (-1 for auto, nearly zero, delay)
   #sweepParams['durationEstimate'] = k2450.estimateSweepTimeout(sweepParams['nPoints'], sweepParams['stepDelay'], sweepParams['nplc'])
   
-  rOpt = {}
-  rOpt['n'] = 5
-  rOpt['fourWire'] = True
-  rOpt['nplc'] = 10
-  rOpt['sourceCurr'] = 1e-10 # amps
-  rOpt['vMax'] = 20e-3 # 20e-3, 200e-3, 2, 20 200 volts
-  rOpt['vMax'] = 200e-3
-  rOpt['vMax'] = 2e-3
-  rOpt['vMax'] = 20
-  rOpt['vMax'] = 200
+  #rOpt = {}
+  #rOpt['n'] = 5
+  #rOpt['fourWire'] = True
+  #rOpt['nplc'] = 10
+  #rOpt['sourceCurr'] = 1e-1 # amps
+  #rOpt['vMax'] = 2e-4 # 20e-3, 200e-3, 2, 20 200 volts
+  #rOpt['vMax'] = 200e-3
+  #rOpt['vMax'] = 2e-3
+  #rOpt['vMax'] = 20
+  #rOpt['vMax'] = 200
+  #rOpt['vMax'] = 2
   
   rsOpt = {}
   rsOpt['fourWire'] = True
@@ -92,8 +93,8 @@ def main():
   #rsOpt['nplc'] = 10
   #rsOpt['iMax'] = 5e-9
   #rsOpt['vLim'] = 50
-  rsOpt['nplc'] = 5
-  rsOpt['iMax'] = 1e-3
+  rsOpt['nplc'] = 1
+  rsOpt['iMax'] = 1e-5
   rsOpt['vLim'] = 0.2
   rsOpt['nPoints'] = 21
   rsOpt['oCom'] = True
