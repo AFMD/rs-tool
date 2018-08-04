@@ -114,14 +114,22 @@ class socketConn:
     else:
       return False
   
-  def read(self,string=True):
-    self.s.setblocking(False)
+  def read(self, string=True, nBytes=0):
     buf = b''
-    while self.termChar not in buf:
-      try:
-        buf += self.s.recv(self.getLen)
-      except BlockingIOError:
-        pass
+    
+    self.s.setblocking(False)
+    if string == True:
+      while self.termChar not in buf:
+        try:
+          buf += self.s.recv(self.getLen)
+        except BlockingIOError:
+          pass
+    else:
+      while len(buf) < nBytes:
+        try:
+          buf += self.s.recv(self.getLen)
+        except BlockingIOError:
+          pass      
     self.s.setblocking(True)
     if string == True:
       ret = buf.decode(self.decode)
@@ -135,10 +143,12 @@ class socketConn:
     else:
       return None
     
-  def query_values(self,string):
+  def query_values(self, string, nValues=0):
+    if nValues != 0:
+      nBytes = 2 + 16*nValues + 1;
     buf = b''
     if self.write(string):
-      result = self.read(string=False)
+      result = self.read(string=False, nBytes=nBytes)
       unpacker = struct.iter_unpack('d',result)
       return numpy.array(list(unpacker))
     else:
@@ -300,7 +310,7 @@ def rSweep(sm, rsOpt):
   status = int(sm.query('*STB?')) # this will return when the measurement is done
   if status != 0:
     events = getEvents(sm,pr=True)
-  values = sm.query_values('TRACe:DATA? 1, {:}, "defbuffer1", SOUR, READ'.format(preCount))
+  values = sm.query_values('TRACe:DATA? 1, {:}, "defbuffer1", SOUR, READ'.format(preCount), nValues=preCount)
   sm.write(":FORMAT:DATA ASCII")
   statiiA = sm.query('TRACe:DATA? 1, {:}, "defbuffer1", SOURSTAT'.format(preCount))
   statiiA = list(map(int,statiiA.split(',')))
@@ -382,7 +392,7 @@ def measureR(sm, rOpt):
   sm.write('TRACe:TRIGger "defbuffer1"')
   sm.timeout = 500
   #pollRet = sm.spoll(ESB)
-  values = sm.query_values('TRACe:DATA? 1, {:}, "defbuffer1", SOUR, READ'.format(rOpt['n']))
+  values = sm.query_values('TRACe:DATA? 1, {:}, "defbuffer1", SOUR, READ'.format(rOpt['n']), nValues=rOpt['n'])
   autoSenseCurrent = float(sm.query("source:current:level?"))
   sm.write('source:current:level {:}'.format(autoSenseCurrent*-1))
   sm.write('OUTPut OFF')
@@ -481,7 +491,7 @@ def fetchSweepData(sm,sweepParams):
     return (None,None)
   
   # ask keithley to return its buffer
-  values = sm.query_values ('TRACE:DATA? {:}, {:}, "defbuffer1", SOUR, READ'.format(1,sweepParams['nPoints']*2-1))
+  values = sm.query_values ('TRACE:DATA? {:}, {:}, "defbuffer1", SOUR, READ'.format(1,sweepParams['nPoints']*2-1), nValues=nReadings)
   sm.write(":TRACE:CLEAR") # clear the buffer now that we've fetched it
 
   # reformat what we got back  
