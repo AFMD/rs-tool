@@ -22,34 +22,42 @@ def main():
   
   # ====for TCPIP comms====
   #instrumentIP = ipaddress.ip_address('172.17.3.60')
-  instrumentIP = ipaddress.ip_address('192.168.1.204') # IP address of sourcemeter
+  ##instrumentIP = ipaddress.ip_address('192.168.1.204') # IP address of sourcemeter
   #fullAddress = 'TCPIP::'+str(instrumentIP)+'::INSTR'
-  fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
-  deviceTimeout = 1000 # ms
-  openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_termination': u'\n'}
+  ##fullAddress = 'TCPIP::'+str(instrumentIP)+'::5025::SOCKET' # for raw TCPIP comms directly through a socket @ port 5025 (probably worse than INSTR)
+  ##deviceTimeout = 1000 # ms
+  ##openParams = {'resource_name': fullAddress, 'timeout': deviceTimeout, '_read_termination': u'\n'}
+ 
   
-  # ====for serial rs232 comms=====
-  #serialPort = "/dev/ttyUSB0"
-  #fullAddress = "ASRL"+serialPort+"::INSTR"
-  #deviceTimeout = 1000 # ms
-  #sm = rm.open_resource(smAddress)
-  #sm.set_visa_attribute(visa.constants.VI_ATTR_ASRL_BAUD,57600)
-  #sm.set_visa_attribute(visa.constants.VI_ASRL_END_TERMCHAR,u'\r')
-  #openParams = {'resource_name':fullAddress, 'timeout': deviceTimeout}
-  
-  if 'SOCKET' in fullAddress:
-    rm = None
-  else:
-    import visa # https://github.com/hgrecco/pyvisa
+  #if 'SOCKET' in fullAddress:
+  #  rm = None
+  #else:
+  import visa # https://github.com/hgrecco/pyvisa
     # create a visa resource manager
-    rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
-  sleepTime = 10 #s  
+  rm = visa.ResourceManager('@py') # select pyvisa-py (pure python) backend
+  sleepTime = 10 #s
   
   # form a connection to our sourcemeter
-  sm = k2450.visaConnect(rm, openParams)
-  if sm is None:
-    exit()
+  #sm = k2450.visaConnect(rm, openParams)
+  #if sm is None:
+  #  exit()
+  
+  
+  # ====for serial rs232 comms=====
+  serialPort = "/dev/ttyS0"
+  fullAddress = "ASRL"+serialPort+"::INSTR"
+  deviceTimeout = 1000 # ms
+  sm = rm.open_resource(fullAddress)
+  sm.read_termination = '\r'
+  sm.write_termination = '\r'
+  sm.set_visa_attribute(visa.constants.VI_ATTR_ASRL_BAUD,57600)
+  #sm.query()
+  #sm.write('*IDN?')
+  #print(sm.read())
+  #sm.set_visa_attribute(visa.constants.VI_ASRL_END_TERMCHAR,u'\n')
 
+  openParams = {'resource_name':fullAddress, 'timeout': deviceTimeout}
+  
   # generic 2450 setup
   k2450.setup2450(sm)
   
@@ -101,37 +109,39 @@ def main():
   rsOpt['failAbort'] = 'OFF'
   rsOpt['stepDelay'] = '-1' # in seconds, -1 is auto delay
   #rsOpt['stepDelay'] = '1' # in seconds, -1 is auto delay
+  do_sweeps = False
   if k2450.rSweep(sm,rsOpt):
-    # initiate the sweeps
-    k2450.doSweep(sm)    
-    [i,v,i2,v2] = k2450.fetchSweepData(sm,rsOpt)
-    
-    fig = plt.figure() # make a figure to put the plot into
-    if i is not None:
-      ax = fig.add_subplot(2,1,1)
-      ax.clear()
-      ax.set_title('Forward Sweep Results',loc="right")
-      rs.plotSweep(i,v,ax) # plot the sweep results
-      plt.show(block=False)
-    
-    # setup for reverse sweep
-    #newEnd = sweepParams['sweepStart']
-    #newStart = sweepParams['sweepEnd']
-    #sweepParams['sweepStart'] = newStart # volts
-    #sweepParams['sweepEnd'] = newEnd # volts
-    #k2450.configureSweep(sm,sweepParams)
-    #time.sleep(sleepTime)
-    # initiate the reverse sweep
-    #k2450.doSweep(sm)
-    # get the data
-    #[i,v] = k2450.fetchSweepData(sm,sweepParams)
-    
-    if i is not None:
-      ax = fig.add_subplot(2,1,2)
-      ax.clear()
-      ax.set_title('Reverse Sweep Results',loc="right")
-      rs.plotSweep(i2,v2,ax) # plot the sweep results
-      plt.show()  
+    if do_sweeps:
+      # initiate the sweeps
+      k2450.doSweep(sm)    
+      [i,v,i2,v2] = k2450.fetchSweepData(sm,rsOpt)
+      
+      fig = plt.figure() # make a figure to put the plot into
+      if i is not None:
+        ax = fig.add_subplot(2,1,1)
+        ax.clear()
+        ax.set_title('Forward Sweep Results',loc="right")
+        rs.plotSweep(i,v,ax) # plot the sweep results
+        plt.show(block=False)
+      
+      # setup for reverse sweep
+      #newEnd = sweepParams['sweepStart']
+      #newStart = sweepParams['sweepEnd']
+      #sweepParams['sweepStart'] = newStart # volts
+      #sweepParams['sweepEnd'] = newEnd # volts
+      #k2450.configureSweep(sm,sweepParams)
+      #time.sleep(sleepTime)
+      # initiate the reverse sweep
+      #k2450.doSweep(sm)
+      # get the data
+      #[i,v] = k2450.fetchSweepData(sm,sweepParams)
+      
+      if i is not None:
+        ax = fig.add_subplot(2,1,2)
+        ax.clear()
+        ax.set_title('Reverse Sweep Results',loc="right")
+        rs.plotSweep(i2,v2,ax) # plot the sweep results
+        plt.show()  
   
   print("Closing connection to sourcemeter...")
   sm.close() # close connection

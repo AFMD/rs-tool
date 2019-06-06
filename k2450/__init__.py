@@ -244,12 +244,14 @@ def setup2450(sm):
   sm.write(":TRACE:CLEAR") # clear the defualt buffer ("defbuffer1")
   sm.write("*CLS") # clear status & system logs and associated registers
   sm.write("*SRE {:}".format((1<<2) + (1<<4))) # enable error reporting via status bit (by setting EAV bit)
-  sm.write("*LANG SCPI")
+  #sm.write("FORM:SREG BIN")
+  #sm.write("*LANG SCPI")
+  sm.write(':ROUTE:TERMINALS REAR')
   
   # setup for binary (superfast) data transfer
-  sm.write(":FORMAT:DATA REAL")
+  #sm.write(":FORMAT:DATA REAL")
   sm.values_format.container = numpy.array
-  sm.values_format.datatype = 'd'
+  #sm.values_format.datatype = 'd'
   return True # setup completed properly
 
 # returns number of milliseconds to use for the sweep timeout value
@@ -274,59 +276,72 @@ def estimateSweepTimeout(nPoints,stepDelay,nplc):
 # sweep through some source current values and measure v to find R
 def rSweep(sm, rsOpt):
   sm.write('SENSE:NPLC {:}'.format(rsOpt['nplc']))
-  sm.write('SENSe:FUNCtion "VOLT"')
-  sm.write('SENSe:VOLTage:RANGe:AUTO ON')
-  sm.write('SENSe:VOLTage:UNIT OHM')
+  sm.write('SENSe:FUNCtion "RESISTANCE"')
+  sm.write(':SENSe:RESistance:RANGE:AUTO ON')
+  sm.write(':SENSe:RESistance:MODE AUTO')
+  #sm.write('SENSe:VOLTage:UNIT OHM')
   
   if not rsOpt['autoZero']:
     sm.write(':SENSe:AZERO:ONCE') # do one autozero now
     sm.write(':SENSe:VOLTage:AZERO OFF')
   else:
-    sm.write(':SENSe:VOLTage:AZERO ON') # do autozero on every measurement
+    #sm.write(':SENSe:VOLTage:AZERO ON') # do autozero on every measurement
+    sm.write(':SYSTem:AZERo:STATe ON') # do autozero on every measurement
   
   if rsOpt['oCom']:
-    sm.write('SENSe:VOLTage:OCOM ON')
+    sm.write(':SENSe:RESistance:OCOMpensated ON')
   else:
-    sm.write('SENSe:VOLTage:OCOM OFF')
+    sm.write(':SENSe:RESistance:OCOMpensated OFF')
   
   if rsOpt['fourWire']:
-    sm.write(':SENSE1:VOLTage:RSENSE ON')# rsense (remote voltage sense) ON means four wire mode
+    sm.write(':SYSTem:RSENSE ON')# rsense (remote voltage sense) ON means four wire mode
   else:
-    sm.write(':SENSE:VOLTage:RSENSE OFF')# rsense (remote voltage sense) ON means four wire mode
+    sm.write(':SYSTem:RSENSE OFF')# rsense (remote voltage sense) ON means four wire mode
     
   sm.write('SOURce:FUNCtion CURR')
   if rsOpt['stepDelay'] != '-1':
-    sm.write('SOURce:CURRent:DELAY:AUTO OFF')
-    sm.write('SOURce:CURRent:DELAY {:}'.format(float(rsOpt['stepDelay'])))
+    sm.write('SOURce:DELAY:AUTO OFF')
+    sm.write('SOURce:DELAY {:}'.format(float(rsOpt['stepDelay'])))
   else:
-    sm.write('SOURce:CURRent:DELAY:AUTO ON')
-  sm.write('SOURce:CURRent {:}'.format(rsOpt['iMax']))
-  sm.write('SOURce:CURRent:VLIM {:}'.format(rsOpt['vLim']))
+    sm.write('SOURce:DELAY:AUTO ON')
+  #sm.write('SOURce:CURRent {:}'.format(rsOpt['iMax']))
+  #sm.write('SOURce:CURRent:VLIM {:}'.format(rsOpt['vLim']))
   preCount = 10
-  sm.write('SENSe:COUNt {:}'.format(preCount))
+  sm.write(':TRAC:FEED SENS')
+  sm.write(':TRAC:POIN {:}'.format(preCount))
+  sm.write(':TRAC:FEED:CONT NEXT')
+  sm.write(':TRIG:COUN {:}'.format(preCount))
   sm.write('OUTPut ON')
-  sm.write('TRACe:TRIGger "defbuffer1"')
+  sm.write(':INIT')
+
+  opc = sm.query('*OPC?')
+  sm.write('OUTPut OFF')
+
   
-  status = int(sm.query('*STB?')) # this will return when the measurement is done
-  if status != 0:
-    events = getEvents(sm,pr=True)
-  values = sm.query_values('TRACe:DATA? 1, {:}, "defbuffer1", SOUR, READ'.format(preCount), nValues=preCount)
-  sm.write(":FORMAT:DATA ASCII")
-  statiiA = sm.query('TRACe:DATA? 1, {:}, "defbuffer1", SOURSTAT'.format(preCount))
-  statiiA = list(map(int,statiiA.split(',')))
+  #status = int(sm.query('*STB?')) # this will return when the measurement is done
+  #if status != 0:
+  #  events = getEvents(sm,pr=True)
+  values = numpy.array(sm.query_ascii_values('TRACE:DATA?'))
+  #sm.write('TRACe:DATA?')
+  #values = sm.query_values('TRACe:DATA?')
+  #sm.write(":FORMAT:DATA ASCII")
+  #statiiA = sm.query('TRACe:DATA? 1, {:}, "defbuffer1", SOURSTAT'.format(preCount))
+  #statiiA = list(map(int,statiiA.split(',')))
   #print(statiiA)
-  statii = sm.query('TRACe:DATA? 1, {:}, "defbuffer1", STAT'.format(preCount))
-  statii = list(map(int,statii.split(',')))
+  #statii = sm.query('TRACe:DATA? 1, {:}, "defbuffer1", STAT'.format(preCount))
+  #statii = list(map(int,statii.split(',')))
   #print(statii)
-  sm.write(":FORMAT:DATA REAL")
+  #sm.write(":FORMAT:DATA REAL")
   
   sm.write(":TRACE:CLEAR")
-  values = values.reshape([preCount,2])
-  s = values[:,0]
-  r = values[:,1]
-  v = s*r
+  values = values.reshape([preCount,5])
+  v = values[:,0]
+  i = values[:,1]
+  r = values[:,2]
+  t = values[:,3]
+  s = values[:,4]
   vMin = v.min()
-  if any(map (lambda x: SS_LIM & x,statiiA)):
+  if any(map (lambda x: SS_LIM & int(x),s)):
     print('ERROR: Source voltage limit hit on one or more of our measurements.')
     print('Pro Tip: Reduce the max source current or increase the voltage limit.')
     return False
@@ -334,29 +349,29 @@ def rSweep(sm, rsOpt):
     print('ERROR: A voltage measured was only {:}V'.format(vMin))
     print('Pro Tip: Consider increasing the max source current.')
     return False
-  elif 0.1*s[1::].mean() < s[1::].std():
+  elif 0.1*i[1::].mean() < i[1::].std():
     print('ERROR: The source current was very unsteady across several measurements.')
     print('Pro Tip: Reduce the max source current.')
     return False
   else:
-    newImax = s.mean()
+    newImax = i.mean()
     print('Preliminary values:')
     R = r.mean() # resistance
     rS = R*math.pi/math.log(2) # sheet resistance
     print ("R=", R,'+/-',R.std(),u" [\u03A9]")
     print ("R_s=",rS,u" [\u03A9/\u25AB]")
     
-    print('Starting resistance sweep from {:} to {:} A'.format(newImax,-newImax))
-    senseRange = float(sm.query('SENSe:VOLTage:RANGe?'))
-    sm.write('SENSe:VOLTage:RANGe {:}'.format(senseRange))
-    sm.write(':SYSTem:CLEar')
+    #print('Starting resistance sweep from {:} to {:} A'.format(newImax,-newImax))
+    #senseRange = float(sm.query('SENSe:VOLTage:RANGe?'))
+    #sm.write('SENSe:VOLTage:RANGe {:}'.format(senseRange))
+    #sm.write(':SYSTem:CLEar')
     #getEvents(sm,pr=False)
-    sourceRange = float(sm.query('SOURCE:CURR:RANGe?'))
-    sm.write('SOURCE:CURR:RANGe {:}'.format(sourceRange))
-    sm.write('SENSe:VOLTage:UNIT VOLT')
+    #sourceRange = float(sm.query('SOURCE:CURR:RANGe?'))
+    #sm.write('SOURCE:CURR:RANGe {:}'.format(sourceRange))
+    #sm.write('SENSe:VOLTage:UNIT VOLT')
     
     # setup the sweep
-    sm.write(':SOURCE:SWEEP:CURR:LINEAR {:}, {:}, {:}, {:}, 1, fixed, {:}, ON, "defbuffer1"'.format(newImax,-newImax,rsOpt['nPoints'],rsOpt['stepDelay'],rsOpt['failAbort']))
+    #sm.write(':SOURCE:SWEEP:CURR:LINEAR {:}, {:}, {:}, {:}, 1, fixed, {:}, ON, "defbuffer1"'.format(newImax,-newImax,rsOpt['nPoints'],rsOpt['stepDelay'],rsOpt['failAbort']))
       
 #      sm.write('INIT')#do the sweep
 #      sm.write('*WAI') # no other commands during this
@@ -411,7 +426,7 @@ def configureSweep(sm,sweepParams):
     sm.write(':SENSE1:{:}:RSENSE ON'.format(sweepParams['senseFun']))# rsense (remote voltage sense) ON means four wire mode
   else:
     sm.write(':SENSE1:{:}:RSENSE OFF'.format(sweepParams['senseFun']))# rsense (remote voltage sense) ON means four wire mode
-  sm.write(':ROUTE:TERMINALS FRONT')
+  sm.write(':ROUTE:TERMINALS REAR')
   sm.write(':SOURCE1:{:}:LEVEL:IMMEDIATE:AMPLITUDE {:}'.format(sweepParams['sourceFun'],sweepParams['sweepStart'])) # set output to sweep start voltage
   
   # do one auto zero manually (could take over a second)
